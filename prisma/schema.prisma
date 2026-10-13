@@ -1,0 +1,94 @@
+// This is the standard, 100% working setup
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. User Table
+model User {
+  id        String     @id @unique
+  email     String     @unique
+  password  String
+  name      String?
+  customers Customer[]
+  products  Product[]
+  invoices  Invoice[]
+}
+
+// 2. Customer Table
+model Customer {
+  id             String    @id @unique
+  name           String
+  category       String?
+  email          String?
+  phone          String?
+  address        String?
+  openingBalance Float     @default(0)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  invoices       Invoice[]
+}
+
+// 3. Product Table
+model Product {
+  id           String        @id @unique
+  name         String
+  category     String
+  cost         Float         @default(0)
+  price        Float         
+  stock        Float           @default(0)
+  unit      String   @default("Bags") // ADD THIS LINE
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+// 4. Invoices Table
+model Invoice {
+  id             String        @id @unique @default(cuid())
+  totalAmount    Float
+  paidAmount     Float         @default(0) 
+  discountAmount Float         @default(0)   
+  isReturn       Boolean       @default(false)
+  isHold         Boolean       @default(false) 
+  notes          String?       // 🔴 ADD THIS EXACT LINE
+  createdAt      DateTime      @default(now())
+  
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  
+  items          InvoiceItem[]
+}
+
+// 5. Invoice Items
+model InvoiceItem {
+  id        String  @id @unique @default(cuid())
+  quantity  Float
+  price     Float  
+  
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// 6. Categories
+model ProductCategory {
+  id     String @id @unique
+  name   String
+  userId String
+}
+
+model CustomerCategory {
+  id     String @id @unique
+  name   String
+  userId String
+}

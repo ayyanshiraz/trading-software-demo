@@ -37,7 +37,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const stats = await getDashboardStats(from, to)
 
   return (
-    <div className="min-h-screen bg-slate-50 lg:ml-64 p-4 pt-20 lg:p-8">
+    <div className="min-h-screen bg-slate-50 lg:ml-64 p-4 pt-20 lg:p-8 overflow-x-hidden">
+      
+      {/* NAYA LOGIC: Automated Welcome Notification Alert */}
+      <div className="fixed top-24 right-4 md:right-8 z-[100] bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl border-l-4 border-emerald-500 flex items-center gap-4 animate-[slideOut_5s_ease-in-out_forwards]">
+          <style>{`
+              @keyframes slideOut {
+                  0% { transform: translateX(120%); opacity: 0; }
+                  10% { transform: translateX(0); opacity: 1; }
+                  85% { transform: translateX(0); opacity: 1; }
+                  100% { transform: translateX(150%); opacity: 0; pointer-events: none; }
+              }
+          `}</style>
+          <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <TrendingUp size={20} className="text-emerald-400" />
+          </div>
+          <div>
+              <h4 className="font-black text-sm uppercase tracking-widest text-white leading-none mb-1.5">Welcome Back!</h4>
+              <p className="text-[10px] text-slate-300 font-bold tracking-wide uppercase leading-none">Your command center is ready.</p>
+          </div>
+      </div>
+
       <div className="max-w-6xl mx-auto space-y-6">
         
         {/* HEADER & DATE FILTER */}
@@ -93,7 +113,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               </div>
           </div>
 
-          {/* 🔴 UPDATED: Highly Detailed Receivables Card */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center border-l-4 border-l-orange-500 hover:shadow-md transition">
               <div className="flex justify-between items-center w-full">
                   <div>

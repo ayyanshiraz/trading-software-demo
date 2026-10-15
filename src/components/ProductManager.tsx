@@ -1,26 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Zap, Save, Trash2, Edit } from 'lucide-react'
+import { Search, Zap, Save, Trash2, Edit, Download } from 'lucide-react'
 import { saveProduct, deleteProduct } from '@/actions/actions' 
 
-// Helper to split combined hardware name back into individual fields for the table & edit mode
-const parseHardwareName = (fullName: string = '') => {
+const parseClothingName = (fullName: string = '') => {
     const match = fullName.match(/^(.*?)\s*\[(.*)\]$/)
-    if (!match) return { baseName: fullName, brand: '', size: '', color: '', material: '' }
+    if (!match) return { baseName: fullName, fabric: '', size: '', color: '' }
     
     const baseName = match[1].trim()
     const specsStr = match[2]
-    let brand = '', size = '', color = '', material = ''
+    let fabric = '', size = '', color = ''
     
     specsStr.split('|').forEach(part => {
         const [k, v] = part.split(':').map(s => s.trim())
-        if (k === 'Brand') brand = v || ''
+        if (k === 'Fabric') fabric = v || ''
         if (k === 'Size') size = v || ''
         if (k === 'Color') color = v || ''
-        if (k === 'Mat') material = v || ''
     })
-    return { baseName, brand, size, color, material }
+    return { baseName, fabric, size, color }
 }
 
 export default function ProductManager({ products = [], categories = [] }: { products: any[], categories: any[] }) {
@@ -34,32 +32,62 @@ export default function ProductManager({ products = [], categories = [] }: { pro
 
   const [newId, setNewId] = useState('')
   const [newName, setNewName] = useState('')
-  const [newBrand, setNewBrand] = useState('')
+  const [newFabric, setNewFabric] = useState('')
   const [newSize, setNewSize] = useState('')
   const [newColor, setNewColor] = useState('')
-  const [newMaterial, setNewMaterial] = useState('')
   const [newCat, setNewCat] = useState('')
   const [newUnit, setNewUnit] = useState('Pcs') 
   const [newCost, setNewCost] = useState('')
   const [newPrice, setNewPrice] = useState('')
 
-  // Hardware Store Units
-  const units = ['Pcs', 'Box', 'Dozen', 'Packet', 'Set', 'Kg', 'Feet', 'Meter']
+  const units = ['Pcs', 'Set', 'Dozen', 'Box']
 
   const filteredProducts = products.filter(p => {
       const q = search.toLowerCase()
       return (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q)
   })
 
+  // NAYA LOGIC: Export CSV Function
+ const handleExportCSV = () => {
+      if (filteredProducts.length === 0) return alert('No data available to export.')
+
+      const headers = ['Item Code', 'Item Name', 'Fabric', 'Size', 'Color', 'Category', 'Unit', 'Cost Price', 'Selling Price']
+      const csvRows = [headers.join(',')]
+
+      filteredProducts.forEach(p => {
+          const parsed = parseClothingName(p.name)
+          const row = [
+              `="${p.id}"`,
+              `="${parsed.baseName}"`,
+              `="${parsed.fabric}"`,
+              `="${parsed.size}"`,
+              `="${parsed.color}"`,
+              `="${p.category || 'No Category'}"`,
+              `="${p.unit}"`,
+              p.cost,
+              p.price
+          ]
+          csvRows.push(row.join(','))
+      })
+
+      const csvContent = csvRows.join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Inventory_Export_${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+  }
+
   const handleEditClick = (p: any) => {
-      const parsed = parseHardwareName(p.name)
+      const parsed = parseClothingName(p.name)
       setEditingOriginalId(p.id)
       setNewId(p.id)
       setNewName(parsed.baseName)
-      setNewBrand(parsed.brand)
+      setNewFabric(parsed.fabric)
       setNewSize(parsed.size)
       setNewColor(parsed.color)
-      setNewMaterial(parsed.material)
       setNewCat(p.category || '')
       setNewUnit(p.unit || 'Pcs')
       setNewCost(p.cost?.toString() || '0')
@@ -70,7 +98,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
 
   const handleCancelEdit = () => {
       setEditingOriginalId('')
-      setNewId(''); setNewName(''); setNewBrand(''); setNewSize(''); setNewColor(''); setNewMaterial('');
+      setNewId(''); setNewName(''); setNewFabric(''); setNewSize(''); setNewColor('');
       setNewCat(''); setNewUnit('Pcs'); setNewCost(''); setNewPrice('');
   }
 
@@ -78,12 +106,10 @@ export default function ProductManager({ products = [], categories = [] }: { pro
       e.preventDefault()
       setIsSaving(true)
       try {
-          // Build the combined hardware name with dimensions
           const specs: string[] = []
-          if (newBrand.trim()) specs.push(`Brand: ${newBrand.trim()}`)
+          if (newFabric.trim()) specs.push(`Fabric: ${newFabric.trim()}`)
           if (newSize.trim()) specs.push(`Size: ${newSize.trim()}`)
           if (newColor.trim()) specs.push(`Color: ${newColor.trim()}`)
-          if (newMaterial.trim()) specs.push(`Mat: ${newMaterial.trim()}`)
 
           const finalProductName = specs.length > 0 
               ? `${newName.trim()} [${specs.join(' | ')}]` 
@@ -101,7 +127,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
           await saveProduct(formData)
           
           handleCancelEdit()
-          alert(editingOriginalId ? 'Product updated successfully!' : 'Product added successfully!')
+          alert(editingOriginalId ? 'Product updated successfully' : 'Product added successfully')
       } catch (err) {
           alert('Error saving product.')
       } finally {
@@ -129,7 +155,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                   await saveProduct(formData)
               }
           }
-          alert('All prices updated successfully!')
+          alert('All prices updated successfully')
           setQuickEditMode(false)
           setDraftCosts({})
           setDraftPrices({})
@@ -164,43 +190,36 @@ export default function ProductManager({ products = [], categories = [] }: { pro
 
         <form onSubmit={handleAddProduct} className={`bg-white p-6 md:p-8 rounded-3xl shadow-xl border ${editingOriginalId ? 'border-blue-400 ring-4 ring-blue-50' : 'border-slate-200'}`}>
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black uppercase text-slate-900">{editingOriginalId ? 'Edit Hardware Item' : 'Add New Hardware Item'}</h2>
+                <h2 className="text-xl font-black uppercase text-slate-900">{editingOriginalId ? 'Edit Item' : 'Add New Item'}</h2>
                 {editingOriginalId && <button type="button" onClick={handleCancelEdit} className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-800">Cancel Edit</button>}
             </div>
             
-            {/* ROW 1: Product ID & Base Product Name */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Item Code / ID (Optional)</label>
-                    <input id="new-id" type="text" value={newId} onChange={e => setNewId(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-name')} placeholder="E.G. TB-001" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase" />
+                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Item Code (Optional)</label>
+                    <input id="new-id" type="text" value={newId} onChange={e => setNewId(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-name')} placeholder="E.G. AB-001" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase" />
                 </div>
                 <div className="md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Part / Item Name</label>
-                    <input id="new-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-brand')} required dir="ltr" placeholder="E.G. TOWER BOLT" className="urdu-font text-left w-full p-3 bg-white border-2 border-slate-300 rounded-xl font-black text-slate-900 outline-none focus:border-blue-600 transition uppercase" />
+                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Item Name (Abaya, Janamaz, Tasbeeh)</label>
+                    <input id="new-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-fabric')} required dir="ltr" placeholder="E.G. FRONT OPEN ABAYA" className="urdu-font text-left w-full p-3 bg-white border-2 border-slate-300 rounded-xl font-black text-slate-900 outline-none focus:border-blue-600 transition uppercase" />
                 </div>
             </div>
 
-            {/* ROW 2: HARDWARE DIMENSIONS (Brand, Size, Color, Material) */}
-            <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Brand</label>
-                    <input id="new-brand" type="text" value={newBrand} onChange={e => setNewBrand(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-size')} placeholder="e.g. Master / Adamjee" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Fabric / Material</label>
+                    <input id="new-fabric" type="text" value={newFabric} onChange={e => setNewFabric(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-size')} placeholder="e.g. Nida / Chiffon / Velvet" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Size / Dimension</label>
-                    <input id="new-size" type="text" value={newSize} onChange={e => setNewSize(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-color')} placeholder="e.g. 6 Inch / 12mm" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Size</label>
+                    <input id="new-size" type="text" value={newSize} onChange={e => setNewSize(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-color')} placeholder="e.g. 52 / 54 / 56 / Free Size" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Color / Finish</label>
-                    <input id="new-color" type="text" value={newColor} onChange={e => setNewColor(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-material')} placeholder="e.g. Antique / Silver / Black" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
-                </div>
-                <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Material</label>
-                    <input id="new-material" type="text" value={newMaterial} onChange={e => setNewMaterial(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cat')} placeholder="e.g. Brass / SS / Iron" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Color</label>
+                    <input id="new-color" type="text" value={newColor} onChange={e => setNewColor(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cat')} placeholder="e.g. Black / Maroon / Navy" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
             </div>
 
-            {/* ROW 3: Category & Hardware Unit */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Category</label>
@@ -217,7 +236,6 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                 </div>
             </div>
 
-            {/* ROW 4: Cost & Selling Price */}
             <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                     <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Cost Price (PKR)</label>
@@ -230,27 +248,30 @@ export default function ProductManager({ products = [], categories = [] }: { pro
             </div>
 
             <button id="prod-submit-btn" type="submit" disabled={isSaving} className={`w-full py-4 text-white rounded-xl font-black uppercase tracking-widest transition disabled:opacity-50 ${editingOriginalId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-black'}`}>
-                {isSaving ? 'Saving...' : (editingOriginalId ? 'Update Hardware Item' : 'Save Hardware Item')}
+                {isSaving ? 'Saving...' : (editingOriginalId ? 'Update Item' : 'Save Item')}
             </button>
         </form>
 
-        {/* PRODUCTS TABLE WITH DIMENSIONS */}
         <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-200">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <div className="relative w-full md:w-80">
+            <div className="flex flex-col lg:flex-row justify-between items-center mb-6 gap-4">
+                <div className="relative w-full lg:w-80">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search item, brand, size, color, material..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" className="urdu-font text-left w-full pl-10 p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 text-xs" />
+                    <input type="text" placeholder="Search item, fabric, size, color..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" className="urdu-font text-left w-full pl-10 p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 text-xs" />
                 </div>
                 
-                <div className="flex gap-3 w-full md:w-auto">
+                <div className="flex gap-3 w-full lg:w-auto">
+                    <button type="button" onClick={handleExportCSV} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition bg-slate-900 text-white hover:bg-black shadow-md border border-slate-800">
+                        <Download size={16} /> Export CSV
+                    </button>
+
                     {!quickEditMode ? (
-                        <button type="button" onClick={() => setQuickEditMode(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
-                            <Zap size={16} /> Quick Edit Prices
+                        <button type="button" onClick={() => setQuickEditMode(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                            <Zap size={16} /> Quick Edit
                         </button>
                     ) : (
                         <>
-                            <button type="button" onClick={() => { setQuickEditMode(false); setDraftCosts({}); setDraftPrices({}); }} className="px-6 py-3 rounded-xl text-xs font-black uppercase bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</button>
-                            <button type="button" onClick={handleSaveQuickEdits} disabled={isSaving} className="flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg">
+                            <button type="button" onClick={() => { setQuickEditMode(false); setDraftCosts({}); setDraftPrices({}); }} className="px-5 py-3 rounded-xl text-xs font-black uppercase bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</button>
+                            <button type="button" onClick={handleSaveQuickEdits} disabled={isSaving} className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg">
                                 <Save size={16} /> {isSaving ? 'Saving...' : 'Save Edits'}
                             </button>
                         </>
@@ -264,10 +285,9 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                         <tr>
                             <th className="p-4">ID</th>
                             <th className="p-4">Item Name</th>
-                            <th className="p-4">Brand</th>
+                            <th className="p-4">Fabric</th>
                             <th className="p-4">Size</th>
                             <th className="p-4">Color</th>
-                            <th className="p-4">Material</th>
                             <th className="p-4 text-center">Unit</th>
                             <th className={`p-4 text-right ${quickEditMode ? 'bg-orange-100 text-orange-800 border-b-4 border-orange-400' : ''}`}>Cost</th>
                             <th className={`p-4 text-right ${quickEditMode ? 'bg-emerald-100 text-emerald-800 border-b-4 border-emerald-400' : ''}`}>Price</th>
@@ -276,7 +296,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                     </thead>
                     <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
                         {filteredProducts.map((p, index) => {
-                            const parsed = parseHardwareName(p.name)
+                            const parsed = parseClothingName(p.name)
                             return (
                                 <tr key={p.id} className="hover:bg-slate-50 transition">
                                     <td className="p-4 font-mono text-xs uppercase">{p.id.slice(-6)}</td>
@@ -284,10 +304,9 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                                         <div>{parsed.baseName}</div>
                                         {p.category && <div className="text-[10px] text-slate-400 font-bold">{p.category}</div>}
                                     </td>
-                                    <td className="p-4 uppercase text-xs text-blue-700">{parsed.brand || '---'}</td>
+                                    <td className="p-4 uppercase text-xs text-blue-700">{parsed.fabric || '---'}</td>
                                     <td className="p-4 uppercase text-xs text-slate-800">{parsed.size || '---'}</td>
                                     <td className="p-4 uppercase text-xs text-slate-600">{parsed.color || '---'}</td>
-                                    <td className="p-4 uppercase text-xs text-slate-600">{parsed.material || '---'}</td>
                                     <td className="p-4 text-center"><span className="text-xs bg-slate-200 px-2.5 py-1 rounded text-slate-800 font-black uppercase">{p.unit}</span></td>
                                     
                                     <td className={`p-4 text-right ${quickEditMode ? 'bg-orange-50' : ''}`}>

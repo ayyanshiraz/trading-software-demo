@@ -8,9 +8,15 @@ import { redirect } from 'next/navigation'
 
 const prisma = new PrismaClient()
 
-async function getUser() {
+async function getAuth() {
   const session = await verifySession()
-  return session.userId
+  const user = await prisma.user.findUnique({ where: { id: session.userId } })
+  if (!user) redirect('/login')
+  return { 
+    tenantId: user.parentId || user.id, 
+    role: user.role,                    
+    branchId: user.branchId             
+  }
 }
 
 function revalidateAll() {
@@ -21,6 +27,9 @@ function revalidateAll() {
   revalidatePath('/products')
   revalidatePath('/customers')
   revalidatePath('/receivables')
+  revalidatePath('/transfers') 
+  revalidatePath('/users')
+  revalidatePath('/notifications')
 }
 
 export async function logoutUser() {
@@ -29,7 +38,6 @@ export async function logoutUser() {
   redirect('/login')
 }
 
-// Global ID Generator
 async function getNextInvoiceId(tx: any) {
     const allInvoices = await tx.invoice.findMany({ select: { id: true } });
     let maxSeq = 0;
@@ -42,16 +50,75 @@ async function getNextInvoiceId(tx: any) {
     return String(maxSeq + 1).padStart(5, '0');
 }
 
-// ==========================================
-// 1. PRODUCT ACTIONS
-// ==========================================
+export async function getBranches() {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    let branches = await prisma.branch.findMany({ where: { userId }, orderBy: { type: 'desc' } });
+    
+    if (branches.length === 0) {
+        await prisma.branch.create({ data: { name: 'Jhelum Head Office', type: 'HeadOffice', userId } });
+        await prisma.branch.create({ data: { name: 'Gujrat Branch', type: 'Branch', userId } });
+        branches = await prisma.branch.findMany({ where: { userId }, orderBy: { type: 'desc' } });
+    }
+    return branches;
+}
+
+export async function createStaffUser(username: string, password: string, branchId: string) {
+    const auth = await getAuth();
+    if (auth.role !== 'ADMIN') return { error: 'Only Admin can create users' }
+
+    const existing = await prisma.user.findUnique({ where: { email: username.toLowerCase() } })
+    if (existing) return { error: 'Username already exists' }
+
+    await prisma.user.create({
+        data: {
+            id: `STAFF-${Math.floor(Math.random() * 100000)}`,
+            email: username.toLowerCase(),
+            password: password, 
+            name: username,
+            role: 'STAFF',
+            parentId: auth.tenantId,
+            branchId: branchId
+        }
+    })
+    
+    await prisma.notification.create({
+        data: {
+            title: 'New Staff Added',
+            message: `Account created for ${username}.`,
+            type: 'SYSTEM',
+            userId: auth.tenantId
+        }
+    })
+    
+    revalidateAll()
+    return { success: true }
+}
+
+export async function getStaffUsers() {
+    const auth = await getAuth();
+    return await prisma.user.findMany({
+        where: { parentId: auth.tenantId, role: 'STAFF' },
+        include: { assignedBranch: true },
+        orderBy: { name: 'asc' }
+    })
+}
+
+export async function deleteStaffUser(id: string) {
+    const auth = await getAuth();
+    if (auth.role !== 'ADMIN') return { error: 'Only Admin can delete users' }
+    await prisma.user.deleteMany({ where: { id, parentId: auth.tenantId } })
+    revalidateAll()
+}
+
 export async function saveProduct(formData: FormData) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const originalId = formData.get('originalId') as string 
   let id = formData.get('id') as string
   const name = formData.get('name') as string
   const category = formData.get('category') as string
-  const unit = formData.get('unit') as string || 'Bags' 
+  const unit = formData.get('unit') as string || 'Pcs' 
   const cost = Number(formData.get('cost')) || 0
   const price = Number(formData.get('price')) || 0 
 
@@ -61,21 +128,31 @@ export async function saveProduct(formData: FormData) {
       const existing = await prisma.product.findUnique({ where: { id: originalId } })
       if (existing?.userId !== userId) return { error: "Unauthorized" }
       try { await prisma.product.update({ where: { id: originalId }, data: { id, name, category, unit, cost, price } }) } 
-      catch (e) { return { error: "Cannot change Product ID because it is currently linked to past invoices." } }
+      catch (e) { return { error: "Cannot change Product ID." } }
   } else {
       const existing = await prisma.product.findUnique({ where: { id } })
       if (existing) { 
-          if (existing.userId !== userId) return { error: "This Product ID is already in use by the system. Please type a different ID." }
+          if (existing.userId !== userId) return { error: "This Product ID is already in use." }
           else await prisma.product.update({ where: { id }, data: { name, category, unit, cost, price } }) 
       } else { 
-          await prisma.product.create({ data: { id, name, category, unit, cost, price, stock: 1000, user: { connect: { id: userId } } } }) 
+          const branches = await getBranches();
+          const hq = branches.find((b: any) => b.type === 'HeadOffice') || branches[0];
+          
+          await prisma.product.create({ 
+              data: { 
+                  id, name, category, unit, cost, price, stock: 1000, 
+                  user: { connect: { id: userId } },
+                  branchStocks: { create: [{ branchId: hq.id, quantity: 1000 }] }
+              } 
+          }) 
       }
   }
   revalidateAll(); return { success: true }
 }
 
 export async function deleteProduct(id: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const existing = await prisma.product.findUnique({ where: { id } })
   if (existing?.userId === userId) { 
       try { 
@@ -84,13 +161,14 @@ export async function deleteProduct(id: string) {
           revalidateAll(); 
           return { success: true } 
       } 
-      catch(error) { return { error: "Failed to force delete product." } }
+      catch(error) { return { error: "Failed to delete product." } }
   }
   return { error: "Unauthorized" }
 }
 
 export async function bulkUpdateProductPrices(updates: { id: string, cost: number, price: number }[]) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const myProducts = await prisma.product.findMany({ where: { userId } })
   const myProductIds = myProducts.map((p: any) => p.id)
   const validUpdates = updates.filter(u => myProductIds.includes(u.id))
@@ -98,11 +176,9 @@ export async function bulkUpdateProductPrices(updates: { id: string, cost: numbe
   revalidateAll() 
 }
 
-// ==========================================
-// 2. CATEGORY & CUSTOMER ACTIONS
-// ==========================================
 export async function addProductCategory(formData: FormData) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const originalId = formData.get('originalId') as string
   const name = formData.get('name') as string
   let id = formData.get('id') as string
@@ -113,7 +189,7 @@ export async function addProductCategory(formData: FormData) {
   } else {
       const existing = await prisma.productCategory.findUnique({ where: { id }})
       if (existing) {
-          if (existing.userId !== userId) return { error: "This Category ID is already in use." }
+          if (existing.userId !== userId) return { error: "ID in use." }
           else await prisma.productCategory.update({ where: { id }, data: { name } }) 
       } else await prisma.productCategory.create({ data: { id, name, userId } }) 
   }
@@ -121,14 +197,16 @@ export async function addProductCategory(formData: FormData) {
 }
 
 export async function deleteProductCategory(id: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const existing = await prisma.productCategory.findUnique({ where: { id }})
   if (existing?.userId === userId) await prisma.productCategory.delete({ where: { id } }) 
   revalidateAll()
 }
 
 export async function saveCustomer(formData: FormData) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const originalId = formData.get('originalId') as string 
   let id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -143,11 +221,11 @@ export async function saveCustomer(formData: FormData) {
       const existing = await prisma.customer.findUnique({ where: { id: originalId } })
       if (existing?.userId !== userId) return { error: "Unauthorized" }
       try { await prisma.customer.update({ where: { id: originalId }, data: { id, name, phone, address, category, openingBalance } }) } 
-      catch (e) { return { error: "Cannot change Customer ID because it is currently linked to past invoices." } }
+      catch (e) { return { error: "Cannot change Customer ID." } }
   } else {
       const existing = await prisma.customer.findUnique({ where: { id } })
       if (existing) { 
-          if (existing.userId !== userId) return { error: "This Customer ID is already in use. Please type a different ID." }
+          if (existing.userId !== userId) return { error: "ID in use." }
           else await prisma.customer.update({ where: { id }, data: { name, phone, address, category, openingBalance } }) 
       } else await prisma.customer.create({ data: { id, name, phone, address, category, openingBalance, user: { connect: { id: userId } } } }) 
   }
@@ -155,13 +233,14 @@ export async function saveCustomer(formData: FormData) {
 }
 
 export async function deleteCustomer(id: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const existing = await prisma.customer.findUnique({ where: { id } })
   
   if (existing?.userId === userId) { 
       try { 
           const customerInvoices = await prisma.invoice.findMany({ where: { customerId: id } })
-          const invoiceIds = customerInvoices.map(i => i.id)
+          const invoiceIds = customerInvoices.map((i: any) => i.id)
 
           if (invoiceIds.length > 0) {
               await prisma.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } })
@@ -172,13 +251,14 @@ export async function deleteCustomer(id: string) {
           revalidateAll(); 
           return { success: true } 
       } 
-      catch (error) { return { error: "Failed to force delete customer." } } 
+      catch (error) { return { error: "Failed to delete customer." } } 
   }
   return { error: "Unauthorized" }
 }
 
 export async function addCustomerCategory(formData: FormData) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const originalId = formData.get('originalId') as string
   const name = formData.get('name') as string
   let id = formData.get('id') as string
@@ -189,7 +269,7 @@ export async function addCustomerCategory(formData: FormData) {
   } else {
       const existing = await prisma.customerCategory.findUnique({ where: { id }})
       if (existing) { 
-          if (existing.userId !== userId) return { error: "This Category ID is already in use." }
+          if (existing.userId !== userId) return { error: "ID in use." }
           else await prisma.customerCategory.update({ where: { id }, data: { name } }) 
       } else await prisma.customerCategory.create({ data: { id, name, userId } }) 
   }
@@ -197,26 +277,30 @@ export async function addCustomerCategory(formData: FormData) {
 }
 
 export async function deleteCustomerCategory(id: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const existing = await prisma.customerCategory.findUnique({ where: { id }})
   if (existing?.userId === userId) await prisma.customerCategory.delete({ where: { id } }) 
   revalidateAll()
 }
 
-// ==========================================
-// 3. INVOICE & RETURN LOGIC
-// ==========================================
 export async function createInvoice(invoiceData: any) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const dateToSave = invoiceData.invoiceDate ? new Date(invoiceData.invoiceDate) : new Date()
   
+  const branches = await getBranches();
+  const branchId = auth.role === 'STAFF' && auth.branchId ? auth.branchId : (invoiceData.branchId || branches.find((b: any) => b.type === 'HeadOffice')?.id || branches[0].id);
+
   const result = await prisma.$transaction(async (tx: any) => {
     const nextId = await getNextInvoiceId(tx);
-    return await tx.invoice.create({
+    
+    const invoice = await tx.invoice.create({
       data: {
         id: nextId,
         customer: { connect: { id: invoiceData.customerId } }, 
         user: { connect: { id: userId } },
+        branch: { connect: { id: branchId } },
         totalAmount: Number(invoiceData.totalAmount) || 0, 
         paidAmount: Number(invoiceData.paidAmount) || 0, 
         discountAmount: Number(invoiceData.discountAmount) || 0, 
@@ -227,18 +311,55 @@ export async function createInvoice(invoiceData: any) {
         items: { create: (invoiceData.items || []).map((item: any) => ({ productId: item.productId, quantity: Number(item.quantity), price: Number(item.price) })) }
       }
     })
+
+    if (!invoiceData.isHold) {
+        for (const item of invoiceData.items) {
+            const qty = Number(item.quantity);
+            const stockChange = invoiceData.isReturn ? qty : -qty;
+
+            await tx.productStock.upsert({
+                where: { productId_branchId: { productId: item.productId, branchId: branchId } },
+                update: { quantity: { increment: stockChange } },
+                create: { productId: item.productId, branchId: branchId, quantity: stockChange }
+            });
+        }
+    }
+    
+    await tx.notification.create({
+        data: {
+            title: invoiceData.isReturn ? 'Return Invoice Processed' : 'New Sales Invoice',
+            message: `Amount: PKR ${Number(invoiceData.totalAmount)} | Customer ID: ${invoiceData.customerId}`,
+            type: invoiceData.isReturn ? 'ALERT' : 'SALE',
+            userId: userId
+        }
+    });
+
+    return invoice;
   })
   revalidateAll(); return result;
 }
 
 export async function updateInvoice(invoiceId: string, invoiceData: any) {
-  const userId = await getUser()
-  const existing = await prisma.invoice.findUnique({ where: { id: invoiceId } })
+  const auth = await getAuth();
+  const userId = auth.tenantId;
+  const existing = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { items: true } })
   if (existing?.userId !== userId) throw new Error("Unauthorized")
 
+  const branches = await getBranches();
+  const branchId = existing.branchId || branches[0].id;
   const dateToSave = invoiceData.invoiceDate ? new Date(invoiceData.invoiceDate) : existing.createdAt
 
   await prisma.$transaction(async (tx: any) => {
+    if (!existing.isHold) {
+        for (const item of existing.items) {
+            const reverseQty = existing.isReturn ? -item.quantity : item.quantity;
+            await tx.productStock.updateMany({
+                where: { productId: item.productId, branchId: branchId },
+                data: { quantity: { increment: reverseQty } }
+            });
+        }
+    }
+
     await tx.invoiceItem.deleteMany({ where: { invoiceId } })
     await tx.invoice.update({
       where: { id: invoiceId },
@@ -253,33 +374,85 @@ export async function updateInvoice(invoiceId: string, invoiceData: any) {
           items: { create: (invoiceData.items || []).map((item: any) => ({ productId: item.productId, quantity: Number(item.quantity), price: Number(item.price) })) }
       }
     })
+
+    if (!invoiceData.isHold) {
+        for (const item of invoiceData.items) {
+            const newQty = invoiceData.isReturn ? Number(item.quantity) : -Number(item.quantity);
+            await tx.productStock.upsert({
+                where: { productId_branchId: { productId: item.productId, branchId: branchId } },
+                update: { quantity: { increment: newQty } },
+                create: { productId: item.productId, branchId: branchId, quantity: newQty }
+            });
+        }
+    }
   })
   revalidateAll(); return { id: invoiceId };
 }
 
 export async function deleteInvoice(id: string) {
-  const userId = await getUser()
-  const existing = await prisma.invoice.findUnique({ where: { id } })
-  if (existing?.userId === userId) {
-      await prisma.invoiceItem.deleteMany({ where: { invoiceId: id } })
-      await prisma.invoice.delete({ where: { id } })
-  }
+  const auth = await getAuth();
+  const userId = auth.tenantId;
+  const existing = await prisma.invoice.findUnique({ where: { id }, include: { items: true } })
+  if (!existing || existing.userId !== userId) return;
+
+  const branches = await getBranches();
+  const branchId = existing.branchId || branches[0].id;
+
+  await prisma.$transaction(async (tx: any) => {
+      if (!existing.isHold) {
+          for (const item of existing.items) {
+              const reverseQty = existing.isReturn ? -item.quantity : item.quantity;
+              await tx.productStock.updateMany({
+                  where: { productId: item.productId, branchId: branchId },
+                  data: { quantity: { increment: reverseQty } }
+              });
+          }
+      }
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: id } })
+      await tx.invoice.delete({ where: { id } })
+  });
   revalidateAll()
 }
 
 export async function bulkMakeActive(invoiceIds: string[]) {
-  const userId = await getUser(); const myInvoices = await prisma.invoice.findMany({ where: { userId } }); const validIds = myInvoices.filter((i: any) => invoiceIds.includes(i.id)).map((i: any) => i.id);
-  await prisma.$transaction( validIds.map(id => prisma.invoice.update({ where: { id }, data: { isHold: false } })) ); revalidateAll();
+  const auth = await getAuth();
+  const userId = auth.tenantId; 
+  const myInvoices = await prisma.invoice.findMany({ where: { userId }, include: { items: true } }); 
+  const validInvs = myInvoices.filter((i: any) => invoiceIds.includes(i.id));
+  
+  const branches = await getBranches();
+  
+  await prisma.$transaction(async (tx: any) => {
+      for (const inv of validInvs) {
+          await tx.invoice.update({ where: { id: inv.id }, data: { isHold: false } });
+          const branchId = inv.branchId || branches[0].id;
+          
+          for (const item of inv.items) {
+              const stockChange = inv.isReturn ? item.quantity : -item.quantity;
+              await tx.productStock.upsert({
+                  where: { productId_branchId: { productId: item.productId, branchId: branchId } },
+                  update: { quantity: { increment: stockChange } },
+                  create: { productId: item.productId, branchId: branchId, quantity: stockChange }
+              });
+          }
+      }
+  });
+  revalidateAll();
 }
 
 export async function bulkUpdatePayments(updates: { id: string, paidAmount: number, discountAmount: number }[]) {
-  const userId = await getUser(); const myInvoices = await prisma.invoice.findMany({ where: { userId } }); const validUpdates = updates.filter(u => myInvoices.some((i: any) => i.id === u.id));
-  await prisma.$transaction( validUpdates.map(u => prisma.invoice.update({ where: { id: u.id }, data: { paidAmount: Number(u.paidAmount) || 0, discountAmount: Number(u.discountAmount) || 0, isHold: false } })) ); revalidateAll();
+  const auth = await getAuth();
+  const userId = auth.tenantId; const myInvoices = await prisma.invoice.findMany({ where: { userId } }); const validUpdates = updates.filter(u => myInvoices.some((i: any) => i.id === u.id));
+  await prisma.$transaction( validUpdates.map((u: any) => prisma.invoice.update({ where: { id: u.id }, data: { paidAmount: Number(u.paidAmount) || 0, discountAmount: Number(u.discountAmount) || 0, isHold: false } })) ); revalidateAll();
 }
 
 export async function processSmartReturn(originalInvoiceId: string, returnItems: any[], totalReturnAmount: number, customerId: string, returnDate?: string) {
-  const userId = await getUser(); 
+  const auth = await getAuth();
+  const userId = auth.tenantId; 
   const dateToSave = returnDate ? new Date(returnDate) : new Date();
+  const branches = await getBranches();
+  const branchId = auth.role === 'STAFF' && auth.branchId ? auth.branchId : (branches.find((b: any) => b.type === 'HeadOffice')?.id || branches[0].id);
+
   await prisma.$transaction(async (tx: any) => {
       const nextId = await getNextInvoiceId(tx);
       await tx.invoice.create({ 
@@ -287,16 +460,26 @@ export async function processSmartReturn(originalInvoiceId: string, returnItems:
               id: nextId,
               customer: { connect: { id: customerId } },
               user: { connect: { id: userId } },
+              branch: { connect: { id: branchId } },
               isReturn: true, totalAmount: Number(totalReturnAmount) || 0, paidAmount: 0, discountAmount: 0, createdAt: dateToSave, 
               items: { create: returnItems.map((item: any) => ({ productId: item.productId, quantity: Number(item.quantity), price: Number(item.price) })) } 
           } 
       });
+
+      for (const item of returnItems) {
+          await tx.productStock.upsert({
+              where: { productId_branchId: { productId: item.productId, branchId: branchId } },
+              update: { quantity: { increment: Number(item.quantity) } },
+              create: { productId: item.productId, branchId: branchId, quantity: Number(item.quantity) }
+          });
+      }
   })
   revalidateAll()
 }
 
 export async function getCustomerBalance(customerId: string) {
-  const userId = await getUser();
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const customer = await prisma.customer.findUnique({ where: { id: customerId } })
   if (!customer || customer.userId !== userId) return 0;
 
@@ -311,29 +494,26 @@ export async function getCustomerBalance(customerId: string) {
 }
 
 export async function getCustomerInvoices(customerId: string) {
-  const userId = await getUser();
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   return await prisma.invoice.findMany({ where: { customerId, userId, isReturn: false, isHold: false }, include: { items: { include: { product: true } }, customer: true }, orderBy: { createdAt: 'desc' } })
 }
 
-// ==========================================
-// 4. REPORTING LOGIC
-// ==========================================
 export async function searchInvoices(query: string) {
-  const userId = await getUser();
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   if (!query) return []
   return await prisma.invoice.findMany({ where: { userId, OR: [ { id: { contains: query, mode: 'insensitive' } }, { customer: { name: { contains: query, mode: 'insensitive' } } }, { customer: { phone: { contains: query, mode: 'insensitive' } } } ] }, include: { customer: true, items: { include: { product: true } } }, orderBy: { createdAt: 'desc' }, take: 20 })
 }
 
 export async function getDashboardStats(from?: Date, to?: Date) {
-  const userId = await getUser();
-  
-  // 1. EXACT PERIOD MATH: Filters Revenue, Profit, Vouchers, and Period Receivables
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const dateFilter = (from && to) ? { createdAt: { gte: from, lte: to } } : {}
   const invoicesInPeriod = await prisma.invoice.findMany({ where: { userId, ...dateFilter }, include: { items: { include: { product: true } } } })
   
   let revenue = 0; let returns = 0; let costOfGoods = 0; let salesCount = 0; let holdCount = 0;
-  let voucherCount = 0; 
-  let periodReceivable = 0; // Net new debt generated strictly in this timeframe
+  let voucherCount = 0; let periodReceivable = 0; 
   
   invoicesInPeriod.forEach((inv: any) => {
     if (inv.isHold) { holdCount++; return; } 
@@ -351,7 +531,6 @@ export async function getDashboardStats(from?: Date, to?: Date) {
     }
   })
   
-  // 2. ALL TIME MATH: Calculates the true running market balance
   const customers = await prisma.customer.findMany({ where: { userId } }); 
   const allInvoices = await prisma.invoice.findMany({ where: { userId, isHold: false } }) 
   
@@ -366,15 +545,13 @@ export async function getDashboardStats(from?: Date, to?: Date) {
   return { 
       revenue, returns, netRevenue: revenue - returns, profit: (revenue - returns) - costOfGoods, 
       salesCount, holdCount, margin: revenue > 0 ? (((revenue - returns - costOfGoods) / (revenue - returns)) * 100).toFixed(1) : 0, 
-      customerCount: customers.length, 
-      totalReceivable: trueMarketReceivable, // All-Time Balance
-      periodReceivable,                      // Strictly Date Filtered Balance
-      voucherCount 
+      customerCount: customers.length, totalReceivable: trueMarketReceivable, periodReceivable, voucherCount 
   }
 }
 
 export async function getLedgerReportData(from?: Date, to?: Date) {
-    const userId = await getUser();
+    const auth = await getAuth();
+    const userId = auth.tenantId;
     const start = from ? new Date(from) : new Date(0)
     const end = to ? new Date(to) : new Date()
     end.setHours(23, 59, 59, 999)
@@ -423,7 +600,7 @@ export async function getLedgerReportData(from?: Date, to?: Date) {
            periodRevenue += Number(inv.totalAmount)
            inv.items.forEach((item: any) => {
                const pId = item.productId; const pCost = Number(item.product?.cost || 0); periodCost += (pCost * Number(item.quantity))
-               if (!productSales[pId]) productSales[pId] = { id: pId, name: item.product?.name || 'Unknown', category: item.product?.category || 'Uncategorized', unit: item.product?.unit || 'Bags', qty: 0, revenue: 0, cost: 0 }
+               if (!productSales[pId]) productSales[pId] = { id: pId, name: item.product?.name || 'Unknown', category: item.product?.category || 'Uncategorized', unit: item.product?.unit || 'Pcs', qty: 0, revenue: 0, cost: 0 }
                productSales[pId].qty += Number(item.quantity); productSales[pId].revenue += (Number(item.price) * Number(item.quantity)); productSales[pId].cost += (pCost * Number(item.quantity))
            })
        }
@@ -440,7 +617,7 @@ export async function getLedgerReportData(from?: Date, to?: Date) {
       productCategoryMap[cat].totalCost += p.cost; 
       productCategoryMap[cat].totalProfit += profit;
   });
-  Object.values(productCategoryMap).forEach(c => c.products.sort((a:any, b:any) => b.revenue - a.revenue));
+  Object.values(productCategoryMap).forEach((c: any) => c.products.sort((a:any, b:any) => b.revenue - a.revenue));
 
     return {
         customerLedgers, 
@@ -454,11 +631,9 @@ export async function getLedgerReportData(from?: Date, to?: Date) {
     }
 }
 
-// ==========================================
-// 5. RECEIVABLES & VOUCHERS
-// ==========================================
 export async function createVouchers(vouchers: { customerId: string, amount: number, discount?: number, notes?: string }[], voucherDate?: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const dateToSave = voucherDate ? new Date(voucherDate) : new Date()
 
   await prisma.$transaction(async (tx: any) => {
@@ -486,17 +661,139 @@ export async function createVouchers(vouchers: { customerId: string, amount: num
 }
 
 export async function updateVoucher(id: string, amount: number, voucherDate?: string, discount?: number, notes?: string) {
-  const userId = await getUser()
+  const auth = await getAuth();
+  const userId = auth.tenantId;
   const dataToUpdate: any = { paidAmount: Number(amount), discountAmount: Number(discount || 0), notes: notes || '' }
   if (voucherDate) dataToUpdate.createdAt = new Date(voucherDate)
   await prisma.invoice.updateMany({ where: { id, userId, totalAmount: 0 }, data: dataToUpdate })
   revalidateAll()
 }
+
 export async function getWhatsAppLedgerHistory(customerId: string) {
-    const userId = await getUser();
-    // 🔴 FETCHES ALL ACTIVE INVOICES (Sales, Returns, and Vouchers)
+    const auth = await getAuth();
+    const userId = auth.tenantId;
     return await prisma.invoice.findMany({ 
         where: { customerId, userId, isHold: false }, 
         orderBy: { createdAt: 'asc' } 
     });
+}
+
+export async function createStockTransfer(fromBranchId: string, toBranchId: string, items: { productId: string, quantity: number }[]) {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    const finalFromBranchId = auth.role === 'STAFF' && auth.branchId ? auth.branchId : fromBranchId;
+    
+    await prisma.stockTransfer.create({
+        data: {
+            fromBranchId: finalFromBranchId,
+            toBranchId,
+            userId,
+            status: "Pending",
+            items: {
+                create: items.map((i: any) => ({ productId: i.productId, quantity: Number(i.quantity) }))
+            }
+        }
+    });
+
+    await prisma.notification.create({
+        data: {
+            title: 'Stock Transfer Initiated',
+            message: `Items are pending acceptance.`,
+            type: 'TRANSFER',
+            userId: userId
+        }
+    });
+    
+    revalidateAll();
+    return { success: true };
+}
+
+export async function acceptStockTransfer(transferId: string) {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    const transfer = await prisma.stockTransfer.findUnique({ 
+        where: { id: transferId }, 
+        include: { items: true } 
+    });
+
+    if (!transfer || transfer.userId !== userId || transfer.status !== 'Pending') {
+        return { error: "Transfer invalid hai." };
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+        await tx.stockTransfer.update({ 
+            where: { id: transferId }, 
+            data: { status: 'Accepted', acceptDate: new Date() } 
+        });
+
+        for (const item of transfer.items) {
+            await tx.productStock.updateMany({
+                where: { productId: item.productId, branchId: transfer.fromBranchId },
+                data: { quantity: { decrement: item.quantity } }
+            });
+
+            await tx.productStock.upsert({
+                where: { productId_branchId: { productId: item.productId, branchId: transfer.toBranchId } },
+                update: { quantity: { increment: item.quantity } },
+                create: { productId: item.productId, branchId: transfer.toBranchId, quantity: item.quantity }
+            });
+        }
+        
+        await tx.notification.create({
+            data: {
+                title: 'Stock Transfer Accepted',
+                message: `Inventory updated successfully.`,
+                type: 'SYSTEM',
+                userId: userId
+            }
+        });
+    });
+
+    revalidateAll();
+    return { success: true };
+}
+
+export async function rejectStockTransfer(transferId: string) {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    await prisma.stockTransfer.updateMany({
+        where: { id: transferId, userId, status: 'Pending' },
+        data: { status: 'Rejected' }
+    });
+    revalidateAll();
+}
+
+export async function getStockTransfers() {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    return await prisma.stockTransfer.findMany({
+        where: { userId },
+        include: { 
+            fromBranch: true, 
+            toBranch: true, 
+            items: { include: { product: true } } 
+        },
+        orderBy: { transferDate: 'desc' }
+    });
+}
+
+// ==========================================
+// NOTIFICATIONS LOGIC
+// ==========================================
+export async function getNotifications() {
+    const auth = await getAuth();
+    return await prisma.notification.findMany({
+        where: { userId: auth.tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 50
+    });
+}
+
+export async function markNotificationsAsRead() {
+    const auth = await getAuth();
+    await prisma.notification.updateMany({
+        where: { userId: auth.tenantId, isRead: false },
+        data: { isRead: true }
+    });
+    revalidateAll();
 }

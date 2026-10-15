@@ -1,4 +1,3 @@
-// This is the standard, 100% working setup
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,16 +9,45 @@ datasource db {
 
 // 1. User Table
 model User {
-  id        String     @id @unique
-  email     String     @unique
-  password  String
-  name      String?
-  customers Customer[]
-  products  Product[]
-  invoices  Invoice[]
+  id             String          @id @unique
+  email          String          @unique
+  password       String
+  name           String?
+  
+  role           String          @default("ADMIN") 
+  parentId       String?         
+  parent         User?           @relation("ParentChild", fields: [parentId], references: [id])
+  staff          User[]          @relation("ParentChild")
+  
+  branchId       String?         
+  assignedBranch Branch?         @relation("BranchStaff", fields: [branchId], references: [id])
+
+  customers      Customer[]
+  products       Product[]
+  invoices       Invoice[]
+  branches       Branch[]        @relation("BranchOwner")
+  stockTransfers StockTransfer[]
+  notifications  Notification[]  // NAYA: Notifications relation
 }
 
-// 2. Customer Table
+// 2. Branch / Warehouse Table
+model Branch {
+  id                String          @id @default(cuid())
+  name              String          
+  type              String          @default("Branch") 
+  
+  userId            String          
+  user              User            @relation("BranchOwner", fields: [userId], references: [id])
+  
+  staff             User[]          @relation("BranchStaff") 
+
+  stocks            ProductStock[]
+  invoices          Invoice[]
+  sentTransfers     StockTransfer[] @relation("TransferFrom")
+  receivedTransfers StockTransfer[] @relation("TransferTo")
+}
+
+// 3. Customer Table
 model Customer {
   id             String    @id @unique
   name           String
@@ -33,21 +61,68 @@ model Customer {
   invoices       Invoice[]
 }
 
-// 3. Product Table
+// 4. Product Table
 model Product {
-  id           String        @id @unique
-  name         String
-  category     String
-  cost         Float         @default(0)
-  price        Float         
-  stock        Float           @default(0)
-  unit      String   @default("Bags") // ADD THIS LINE
-  userId       String
-  user         User          @relation(fields: [userId], references: [id])
-  invoiceItems InvoiceItem[]
+  id            String         @id @unique
+  name          String         
+  category      String
+  cost          Float          @default(0)
+  price         Float         
+  stock         Float          @default(0) 
+  unit          String         @default("Pcs") 
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  invoiceItems  InvoiceItem[]
+  branchStocks  ProductStock[]
+  transferItems TransferItem[]
 }
 
-// 4. Invoices Table
+// 5. Product Stock Per Branch
+model ProductStock {
+  id        String  @id @default(cuid())
+  quantity  Float   @default(0)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId])
+}
+
+// 6. Stock Transfer Table
+model StockTransfer {
+  id            String         @id @default(cuid())
+  status        String         @default("Pending") 
+  transferDate  DateTime       @default(now())
+  acceptDate    DateTime?
+  
+  fromBranchId  String
+  fromBranch    Branch         @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  
+  toBranchId    String
+  toBranch      Branch         @relation("TransferTo", fields: [toBranchId], references: [id])
+  
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  
+  items         TransferItem[]
+}
+
+// 7. Transfer Items
+model TransferItem {
+  id          String        @id @default(cuid())
+  quantity    Float
+  
+  transferId  String
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+}
+
+// 8. Invoices Table
 model Invoice {
   id             String        @id @unique @default(cuid())
   totalAmount    Float
@@ -55,7 +130,7 @@ model Invoice {
   discountAmount Float         @default(0)   
   isReturn       Boolean       @default(false)
   isHold         Boolean       @default(false) 
-  notes          String?       // 🔴 ADD THIS EXACT LINE
+  notes          String?       
   createdAt      DateTime      @default(now())
   
   customerId     String
@@ -64,23 +139,26 @@ model Invoice {
   userId         String
   user           User          @relation(fields: [userId], references: [id])
   
+  branchId       String?       
+  branch         Branch?       @relation(fields: [branchId], references: [id])
+  
   items          InvoiceItem[]
 }
 
-// 5. Invoice Items
+// 9. Invoice Items
 model InvoiceItem {
   id        String  @id @unique @default(cuid())
   quantity  Float
   price     Float  
   
   invoiceId String
-  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   
   productId String
   product   Product @relation(fields: [productId], references: [id])
 }
 
-// 6. Categories
+// 10. Categories
 model ProductCategory {
   id     String @id @unique
   name   String
@@ -91,4 +169,17 @@ model CustomerCategory {
   id     String @id @unique
   name   String
   userId String
+}
+
+// 11. NAYA: Notifications Table
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("SYSTEM") // SYSTEM, SALE, TRANSFER, ALERT
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

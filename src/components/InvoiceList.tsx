@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Printer, Trash2, Edit, Search, Zap, Save, MessageCircle, XCircle, Send, PlayCircle, Eye } from 'lucide-react'
+import { Printer, Trash2, Edit, Search, Zap, Save, MessageCircle, XCircle, Send, PlayCircle, Eye, Download } from 'lucide-react'
 import { deleteInvoice, bulkUpdatePayments, bulkMakeActive, getWhatsAppLedgerHistory } from '@/actions/actions'
 
 export default function InvoiceList({ invoices, categories, isHoldView = false }: { invoices: any[], categories: any[], isHoldView?: boolean }) {
@@ -56,6 +56,45 @@ export default function InvoiceList({ invoices, categories, isHoldView = false }
     if (toDate) match = match && (new Date(inv.createdAt) <= new Date(toDate + 'T23:59:59'))
     return match
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+  // NAYA LOGIC: Export CSV Function with Excel Text Fix
+ // EXPORT CSV FUNCTION WITH EXCEL TEXT FIX FOR DATE, TIME & PHONE
+  const handleExportCSV = () => {
+      if (filteredInvoices.length === 0) return alert('No invoices available to export.')
+
+      const headers = ['Invoice No', 'Date', 'Time', 'Customer Name', 'Phone', 'Category', 'Net Total', 'Discount', 'Paid', 'Status']
+      const csvRows = [headers.join(',')]
+
+      filteredInvoices.forEach(inv => {
+          const date = new Date(inv.createdAt).toLocaleDateString('en-GB', {timeZone: 'Asia/Karachi'})
+          const time = new Date(inv.createdAt).toLocaleTimeString('en-US', {timeZone: 'Asia/Karachi'})
+          const displayId = /^\d+$/.test(inv.id) ? inv.id : inv.id.slice(-6).toUpperCase()
+          const status = inv.isReturn ? 'RETURN' : (isHoldView ? 'QUOTATION' : 'SALES')
+          
+          const row = [
+              `="${displayId}"`,
+              `="${date}"`,
+              `="${time}"`,
+              `="${inv.customer.name}"`,
+              `="${inv.customer.phone || ''}"`,
+              `="${inv.customer.category || ''}"`,
+              inv.totalAmount,
+              inv.discountAmount,
+              inv.paidAmount,
+              `="${status}"`
+          ]
+          csvRows.push(row.join(','))
+      })
+
+      const csvContent = csvRows.join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Invoices_Export_${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+  }
 
   const handleSelectAll = (e: any) => {
     if (e.target.checked) setSelectedIds(filteredInvoices.map(i => i.id))
@@ -265,8 +304,12 @@ export default function InvoiceList({ invoices, categories, isHoldView = false }
 
       <div className="flex justify-between items-center mb-4 min-h-[48px]">
           <div className="flex gap-3">
+              <button onClick={handleExportCSV} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition bg-slate-900 text-white hover:bg-black shadow-md border border-slate-800">
+                  <Download size={14} /> Export CSV
+              </button>
+
               {!selectedIds.length && waQueue.length === 0 && !isHoldView && (
-                <button onClick={() => { setRecoveryMode(!recoveryMode); setDraftPayments({}); setDraftDiscounts({}); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition ${recoveryMode ? 'bg-slate-900 text-white shadow-lg' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                <button onClick={() => { setRecoveryMode(!recoveryMode); setDraftPayments({}); setDraftDiscounts({}); }} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition ${recoveryMode ? 'bg-slate-900 text-white shadow-lg' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
                     <Zap size={14} /> {recoveryMode ? 'Cancel Recovery' : 'Payment Recovery Mode'}
                 </button>
               )}
@@ -279,7 +322,7 @@ export default function InvoiceList({ invoices, categories, isHoldView = false }
           </div>
 
           {selectedIds.length > 0 && !recoveryMode && (
-              <div className="bg-blue-600 text-white p-2 md:p-3 rounded-xl flex justify-between items-center w-full animate-fade-in shadow-lg">
+              <div className="bg-blue-600 text-white p-2 md:p-3 rounded-xl flex justify-between items-center w-full animate-fade-in shadow-lg ml-3">
                   <span className="font-black text-xs md:text-sm uppercase tracking-widest pl-2">{selectedIds.length} Selected</span>
                   <div className="flex gap-3">
                       <button onClick={handleBulkWhatsApp} className="flex items-center gap-2 bg-green-500 text-white border border-green-400 px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-[10px] md:text-xs font-black uppercase hover:bg-green-600 transition"><MessageCircle size={14}/> WhatsApp</button>

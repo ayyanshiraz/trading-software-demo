@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { Search, Download } from 'lucide-react'
 
 export default function LedgerFilter({ initialFrom, initialTo, initialQuery = '', initialCat = '', categories = [] }: any) {
     const router = useRouter()
@@ -47,10 +47,43 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
         router.push(url);
     }
 
+    // NAYA LOGIC: Export CSV Function for Ledger
+   const handleExportCSV = () => {
+        const printArea = document.getElementById('print-area');
+        if (!printArea) return alert('No ledger data available to export.');
+
+        const tables = printArea.getElementsByTagName('table');
+        if (tables.length === 0) return alert('No tabular data found in the current view.');
+
+        const activeTable = tables[0];
+        const rows = activeTable.querySelectorAll('tr');
+        const csvData: string[] = [];
+
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('th, td');
+            const rowData: string[] = [];
+            cols.forEach(col => {
+                let text = col.textContent?.trim().replace(/"/g, '""') || '';
+                text = text.replace(/\n/g, ' | ').replace(/\s+/g, ' ');
+                rowData.push(`="${text}"`); // Forces Excel to treat all ledger cells as clean text
+            });
+            if (rowData.length > 0) csvData.push(rowData.join(','));
+        });
+
+        const csvContent = csvData.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const viewType = new URLSearchParams(window.location.search).get('view') || 'ledger';
+        a.download = `${viewType}_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
     return (
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
             
-            {/* CRITICAL FIX: Stretches the invisible calendar icon to cover the whole input for easy clicking */}
             <style>{`
                 input[type="date"]::-webkit-calendar-picker-indicator {
                     position: absolute;
@@ -66,32 +99,36 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
             <div className="flex flex-col gap-4">
                 
                 {/* TOP ROW: Presets & Dates */}
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shrink-0">
-                        <button type="button" onClick={() => setPreset(0)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition border-r border-slate-200">Daily</button>
-                        <button type="button" onClick={() => setPreset(7)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition border-r border-slate-200">Weekly</button>
-                        <button type="button" onClick={() => setPreset(30)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition">Monthly</button>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className="relative w-36 h-[42px] shrink-0 group">
-                            {/* SOLID MASK (z-10): Hides the native text completely */}
-                            <div className={`absolute inset-0 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold pointer-events-none tracking-widest z-10 group-hover:border-blue-500 transition-colors ${!from ? 'text-slate-400' : 'text-slate-900'}`}>
-                                {formatDDMMYYYY(from)}
-                            </div>
-                            {/* NATIVE INPUT (z-0): Trapped behind the mask, but icon catches clicks */}
-                            <input type="date" value={from || ''} onChange={(e) => setFrom(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0" />
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shrink-0">
+                            <button type="button" onClick={() => setPreset(0)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition border-r border-slate-200">Daily</button>
+                            <button type="button" onClick={() => setPreset(7)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition border-r border-slate-200">Weekly</button>
+                            <button type="button" onClick={() => setPreset(30)} className="px-4 py-2.5 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-widest transition">Monthly</button>
                         </div>
 
-                        <span className="text-slate-300 font-bold">-</span>
-
-                        <div className="relative w-36 h-[42px] shrink-0 group">
-                            <div className={`absolute inset-0 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold pointer-events-none tracking-widest z-10 group-hover:border-blue-500 transition-colors ${!to ? 'text-slate-400' : 'text-slate-900'}`}>
-                                {formatDDMMYYYY(to)}
+                        <div className="flex items-center gap-3">
+                            <div className="relative w-36 h-[42px] shrink-0 group">
+                                <div className={`absolute inset-0 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold pointer-events-none tracking-widest z-10 group-hover:border-blue-500 transition-colors ${!from ? 'text-slate-400' : 'text-slate-900'}`}>
+                                    {formatDDMMYYYY(from)}
+                                </div>
+                                <input type="date" value={from || ''} onChange={(e) => setFrom(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0" />
                             </div>
-                            <input type="date" value={to || ''} onChange={(e) => setTo(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0" />
+
+                            <span className="text-slate-300 font-bold">-</span>
+
+                            <div className="relative w-36 h-[42px] shrink-0 group">
+                                <div className={`absolute inset-0 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-xs font-bold pointer-events-none tracking-widest z-10 group-hover:border-blue-500 transition-colors ${!to ? 'text-slate-400' : 'text-slate-900'}`}>
+                                    {formatDDMMYYYY(to)}
+                                </div>
+                                <input type="date" value={to || ''} onChange={(e) => setTo(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0" />
+                            </div>
                         </div>
                     </div>
+
+                    <button onClick={handleExportCSV} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 no-print">
+                        <Download size={14} /> Export CSV
+                    </button>
                 </div>
 
                 {/* BOTTOM ROW: Search & Categories */}

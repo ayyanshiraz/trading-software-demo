@@ -207,7 +207,7 @@ export default async function PrintInvoicePage({ params }: { params: Promise<{ i
                     <div className="flex-1 text-[9px] text-slate-500 space-y-1 pr-2">
                         <p className="font-black uppercase text-slate-700 tracking-wide">Terms &amp; Contact</p>
                         <p className="font-semibold leading-snug">
-                            Please verify all garments, sizes, colors, and quantities upon delivery. For billing inquiries, contact sales representative:
+                            Please verify all clothes, sizes, colors, and quantities upon delivery. For billing inquiries, contact sales representative:
                         </p>
                         <p className="font-black text-slate-900 text-[10px] pt-0.5">
                             {repDetails.name} — {repDetails.phone}

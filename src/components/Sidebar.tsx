@@ -21,7 +21,7 @@ const navGroups: any[] = [
     items: [
       { name: 'Add Product', href: '/products', icon: Package },
       { name: 'Categories', href: '/category/product', icon: Tags },
-      { name: 'Stock Transfers', href: '/transfers', icon: ArrowLeftRight, color: 'text-emerald-400' },
+      { name: 'Main Inventory', href: '/transfers', icon: ArrowLeftRight, color: 'text-emerald-400' },
     ]
   },
   {

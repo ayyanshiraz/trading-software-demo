@@ -100,8 +100,8 @@ export default async function PrintInvoicePage({ params }: { params: Promise<{ i
                             TS
                         </div>
                         <div>
-                            <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 leading-none">Hijab Ul Eman</h1>
-                            <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 mt-1">Abayas, Islamic Wear &amp; Accessories</p>
+                            <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 leading-none">Trading Software Demo</h1>
+                            <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 mt-1">Hardware &amp; Building Materials</p>
                             <p className="text-[10px] font-bold text-slate-800 mt-0.5">Rep: {repDetails.name} ({repDetails.phone})</p>
                         </div>
                     </div>
@@ -207,7 +207,7 @@ export default async function PrintInvoicePage({ params }: { params: Promise<{ i
                     <div className="flex-1 text-[9px] text-slate-500 space-y-1 pr-2">
                         <p className="font-black uppercase text-slate-700 tracking-wide">Terms &amp; Contact</p>
                         <p className="font-semibold leading-snug">
-                            Please verify all clothes, sizes, colors, and quantities upon delivery. For billing inquiries, contact sales representative:
+                            Please verify all hardware, materials, and quantities upon delivery. For billing inquiries, contact sales representative:
                         </p>
                         <p className="font-black text-slate-900 text-[10px] pt-0.5">
                             {repDetails.name} — {repDetails.phone}
@@ -223,7 +223,7 @@ export default async function PrintInvoicePage({ params }: { params: Promise<{ i
                         {invoice.discountAmount > 0 && (
                             <div className="flex justify-between px-2.5 py-1 border-b border-slate-200 bg-white">
                                 <span className="font-bold text-slate-600 uppercase">Discount</span>
-                                <span className="font-black text-red-600">- PKR {invoice.discountAmount.toLocaleString()}</span>
+                                <span className="font-black text-red-600">PKR {invoice.discountAmount.toLocaleString()}</span>
                             </div>
                         )}
 

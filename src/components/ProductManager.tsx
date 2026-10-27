@@ -39,6 +39,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
   const [newUnit, setNewUnit] = useState('Pcs') 
   const [newCost, setNewCost] = useState('')
   const [newPrice, setNewPrice] = useState('')
+  const [newStock, setNewStock] = useState('') // NAYA VARIABLE FOR STOCK
 
   const units = ['Pcs', 'Set', 'Dozen', 'Box']
 
@@ -47,11 +48,11 @@ export default function ProductManager({ products = [], categories = [] }: { pro
       return (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q)
   })
 
-  // NAYA LOGIC: Export CSV Function
+  // EXPORT CSV FUNCTION
  const handleExportCSV = () => {
       if (filteredProducts.length === 0) return alert('No data available to export.')
 
-      const headers = ['Item Code', 'Item Name', 'Fabric', 'Size', 'Color', 'Category', 'Unit', 'Cost Price', 'Selling Price']
+      const headers = ['Item Code', 'Item Name', 'Brand', 'Dimensions', 'Finish', 'Category', 'Unit', 'Cost Price', 'Selling Price']
       const csvRows = [headers.join(',')]
 
       filteredProducts.forEach(p => {
@@ -92,6 +93,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
       setNewUnit(p.unit || 'Pcs')
       setNewCost(p.cost?.toString() || '0')
       setNewPrice(p.price?.toString() || '0')
+      setNewStock('') // Hide stock edit for existing items to prevent accidental overwrites
       window.scrollTo({ top: 0, behavior: 'smooth' })
       document.getElementById('new-name')?.focus()
   }
@@ -99,7 +101,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
   const handleCancelEdit = () => {
       setEditingOriginalId('')
       setNewId(''); setNewName(''); setNewFabric(''); setNewSize(''); setNewColor('');
-      setNewCat(''); setNewUnit('Pcs'); setNewCost(''); setNewPrice('');
+      setNewCat(''); setNewUnit('Pcs'); setNewCost(''); setNewPrice(''); setNewStock('');
   }
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -123,6 +125,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
           formData.append('unit', newUnit)
           formData.append('cost', newCost || '0')
           formData.append('price', newPrice || '0')
+          formData.append('stock', newStock || '0') // STOCK BHEJA JAA RAHA HAI
           
           await saveProduct(formData)
           
@@ -197,26 +200,26 @@ export default function ProductManager({ products = [], categories = [] }: { pro
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Item Code (Optional)</label>
-                    <input id="new-id" type="text" value={newId} onChange={e => setNewId(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-name')} placeholder="E.G. AB-001" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase" />
+                    <input id="new-id" type="text" value={newId} onChange={e => setNewId(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-name')} placeholder="E.G. HW-001" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase" />
                 </div>
                 <div className="md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Item Name (Abaya, Janamaz, Tasbeeh)</label>
-                    <input id="new-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-fabric')} required dir="ltr" placeholder="E.G. FRONT OPEN ABAYA" className="urdu-font text-left w-full p-3 bg-white border-2 border-slate-300 rounded-xl font-black text-slate-900 outline-none focus:border-blue-600 transition uppercase" />
+                    <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Hardware / Material Name</label>
+                    <input id="new-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-fabric')} required dir="ltr" placeholder="E.G. HEAVY DUTY TOWER BOLT" className="urdu-font text-left w-full p-3 bg-white border-2 border-slate-300 rounded-xl font-black text-slate-900 outline-none focus:border-blue-600 transition uppercase" />
                 </div>
             </div>
 
             <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Fabric / Material</label>
-                    <input id="new-fabric" type="text" value={newFabric} onChange={e => setNewFabric(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-size')} placeholder="e.g. Nida / Chiffon / Velvet" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Brand / Manufacturer</label>
+                    <input id="new-fabric" type="text" value={newFabric} onChange={e => setNewFabric(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-size')} placeholder="e.g. Master / Jubilee / Local" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Size</label>
-                    <input id="new-size" type="text" value={newSize} onChange={e => setNewSize(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-color')} placeholder="e.g. 52 / 54 / 56 / Free Size" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Size / Dimensions</label>
+                    <input id="new-size" type="text" value={newSize} onChange={e => setNewSize(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-color')} placeholder="e.g. 6 Inch / 2 mm / 10x10" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Color</label>
-                    <input id="new-color" type="text" value={newColor} onChange={e => setNewColor(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cat')} placeholder="e.g. Black / Maroon / Navy" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
+                    <label className="text-[10px] font-black uppercase text-blue-600 mb-1.5 block">Finish / Color</label>
+                    <input id="new-color" type="text" value={newColor} onChange={e => setNewColor(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cat')} placeholder="e.g. Brass / Silver / Matte Black" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase text-sm" />
                 </div>
             </div>
 
@@ -230,13 +233,18 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                 </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Unit</label>
-                    <select id="new-unit" value={newUnit} onChange={e => setNewUnit(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cost')} className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase">
+                    <select id="new-unit" value={newUnit} onChange={e => setNewUnit(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-stock')} className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase">
                         {units.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* TEEN COLUMNS WALA NAYA SECTION JISME STOCK HAI */}
+            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                    <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Opening Stock (Qty)</label>
+                    <input id="new-stock" type="number" value={newStock} onChange={e => setNewStock(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cost')} placeholder="0" disabled={!!editingOriginalId} className="w-full p-3 bg-white border border-emerald-300 rounded-xl font-black text-slate-900 outline-none focus:border-emerald-600 disabled:opacity-50" />
+                </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Cost Price (PKR)</label>
                     <input id="new-cost" type="number" step="any" value={newCost} onChange={e => setNewCost(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-price')} placeholder="0" className="w-full p-3 bg-white border border-emerald-300 rounded-xl font-black text-slate-900 outline-none focus:border-emerald-600" />
@@ -256,7 +264,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
             <div className="flex flex-col lg:flex-row justify-between items-center mb-6 gap-4">
                 <div className="relative w-full lg:w-80">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search item, fabric, size, color..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" className="urdu-font text-left w-full pl-10 p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 text-xs" />
+                    <input type="text" placeholder="Search item, brand, size, finish..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" className="urdu-font text-left w-full pl-10 p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 text-xs" />
                 </div>
                 
                 <div className="flex gap-3 w-full lg:w-auto">
@@ -285,9 +293,9 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                         <tr>
                             <th className="p-4">ID</th>
                             <th className="p-4">Item Name</th>
-                            <th className="p-4">Fabric</th>
-                            <th className="p-4">Size</th>
-                            <th className="p-4">Color</th>
+                            <th className="p-4">Brand</th>
+                            <th className="p-4">Dimensions</th>
+                            <th className="p-4">Finish</th>
                             <th className="p-4 text-center">Unit</th>
                             <th className={`p-4 text-right ${quickEditMode ? 'bg-orange-100 text-orange-800 border-b-4 border-orange-400' : ''}`}>Cost</th>
                             <th className={`p-4 text-right ${quickEditMode ? 'bg-emerald-100 text-emerald-800 border-b-4 border-emerald-400' : ''}`}>Price</th>

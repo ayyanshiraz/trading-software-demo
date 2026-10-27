@@ -22,7 +22,7 @@ export default async function UsersPage() {
     <div className="min-h-screen bg-slate-50 lg:ml-64 p-4 pt-20 lg:p-8">
       <div className="max-w-4xl mx-auto mb-20">
         <h1 className="text-3xl font-black mb-2 text-slate-900 uppercase tracking-tight">Staff Management</h1>
-        <p className="text-slate-500 font-bold text-sm mb-8">Create accounts for your branch staff. Their sales will automatically deduct from their assigned branch.</p>
+        <p className="text-slate-500 font-bold text-sm mb-8">Create accounts for your staff. Their sales will automatically deduct from the main inventory.</p>
         
         <UserManager staff={staff} branches={branches} />
       </div>

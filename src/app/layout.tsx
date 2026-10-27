@@ -6,8 +6,8 @@ import SidebarWrapper from '@/components/SidebarWrapper' // <--- Import Wrapper
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Hijab Ul Eman',
-  description: 'Hijab Ul Eman Management System',
+  title: 'Trading Software Demo',
+  description: 'Software Management System',
 }
 
 export default function RootLayout({

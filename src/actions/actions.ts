@@ -121,8 +121,9 @@ export async function saveProduct(formData: FormData) {
   const unit = formData.get('unit') as string || 'Pcs' 
   const cost = Number(formData.get('cost')) || 0
   const price = Number(formData.get('price')) || 0 
+  const stockQty = Number(formData.get('stock')) || 0 
 
-  if (!id || id.trim() === '') id = `PROD-${Math.floor(Math.random() * 100000)}`
+  if (!id || id.trim() === '') id = `HW-${Math.floor(Math.random() * 100000)}`
 
   if (originalId && originalId !== id) {
       const existing = await prisma.product.findUnique({ where: { id: originalId } })
@@ -140,9 +141,9 @@ export async function saveProduct(formData: FormData) {
           
           await prisma.product.create({ 
               data: { 
-                  id, name, category, unit, cost, price, stock: 1000, 
+                  id, name, category, unit, cost, price, stock: stockQty, 
                   user: { connect: { id: userId } },
-                  branchStocks: { create: [{ branchId: hq.id, quantity: 1000 }] }
+                  branchStocks: { create: [{ branchId: hq.id, quantity: stockQty }] }
               } 
           }) 
       }

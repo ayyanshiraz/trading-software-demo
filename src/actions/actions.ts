@@ -122,6 +122,7 @@ export async function saveProduct(formData: FormData) {
   const cost = Number(formData.get('cost')) || 0
   const price = Number(formData.get('price')) || 0 
   const stockQty = Number(formData.get('stock')) || 0 
+  const warehouseQty = Number(formData.get('warehouseStock')) || 0 
 
   if (!id || id.trim() === '') id = `HW-${Math.floor(Math.random() * 100000)}`
 
@@ -138,12 +139,18 @@ export async function saveProduct(formData: FormData) {
       } else { 
           const branches = await getBranches();
           const hq = branches.find((b: any) => b.type === 'HeadOffice') || branches[0];
+          const wh = branches.find((b: any) => b.type !== 'HeadOffice') || branches[1];
           
+          const branchStockEntries: any[] = [{ branchId: hq.id, quantity: stockQty }];
+          if (wh && wh.id !== hq.id) {
+              branchStockEntries.push({ branchId: wh.id, quantity: warehouseQty });
+          }
+
           await prisma.product.create({ 
               data: { 
-                  id, name, category, unit, cost, price, stock: stockQty, 
+                  id, name, category, unit, cost, price, stock: stockQty + warehouseQty, 
                   user: { connect: { id: userId } },
-                  branchStocks: { create: [{ branchId: hq.id, quantity: stockQty }] }
+                  branchStocks: { create: branchStockEntries }
               } 
           }) 
       }

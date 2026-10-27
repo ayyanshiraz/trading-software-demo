@@ -39,7 +39,8 @@ export default function ProductManager({ products = [], categories = [] }: { pro
   const [newUnit, setNewUnit] = useState('Pcs') 
   const [newCost, setNewCost] = useState('')
   const [newPrice, setNewPrice] = useState('')
-  const [newStock, setNewStock] = useState('') // NAYA VARIABLE FOR STOCK
+  const [newStock, setNewStock] = useState('')
+  const [newWarehouseStock, setNewWarehouseStock] = useState('')
 
   const units = ['Pcs', 'Set', 'Dozen', 'Box']
 
@@ -48,7 +49,6 @@ export default function ProductManager({ products = [], categories = [] }: { pro
       return (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q)
   })
 
-  // EXPORT CSV FUNCTION
  const handleExportCSV = () => {
       if (filteredProducts.length === 0) return alert('No data available to export.')
 
@@ -93,7 +93,8 @@ export default function ProductManager({ products = [], categories = [] }: { pro
       setNewUnit(p.unit || 'Pcs')
       setNewCost(p.cost?.toString() || '0')
       setNewPrice(p.price?.toString() || '0')
-      setNewStock('') // Hide stock edit for existing items to prevent accidental overwrites
+      setNewStock('')
+      setNewWarehouseStock('')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       document.getElementById('new-name')?.focus()
   }
@@ -101,7 +102,7 @@ export default function ProductManager({ products = [], categories = [] }: { pro
   const handleCancelEdit = () => {
       setEditingOriginalId('')
       setNewId(''); setNewName(''); setNewFabric(''); setNewSize(''); setNewColor('');
-      setNewCat(''); setNewUnit('Pcs'); setNewCost(''); setNewPrice(''); setNewStock('');
+      setNewCat(''); setNewUnit('Pcs'); setNewCost(''); setNewPrice(''); setNewStock(''); setNewWarehouseStock('');
   }
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -125,7 +126,8 @@ export default function ProductManager({ products = [], categories = [] }: { pro
           formData.append('unit', newUnit)
           formData.append('cost', newCost || '0')
           formData.append('price', newPrice || '0')
-          formData.append('stock', newStock || '0') // STOCK BHEJA JAA RAHA HAI
+          formData.append('stock', newStock || '0')
+          formData.append('warehouseStock', newWarehouseStock || '0')
           
           await saveProduct(formData)
           
@@ -239,11 +241,14 @@ export default function ProductManager({ products = [], categories = [] }: { pro
                 </div>
             </div>
 
-            {/* TEEN COLUMNS WALA NAYA SECTION JISME STOCK HAI */}
-            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <div>
-                    <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Opening Stock (Qty)</label>
-                    <input id="new-stock" type="number" value={newStock} onChange={e => setNewStock(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cost')} placeholder="0" disabled={!!editingOriginalId} className="w-full p-3 bg-white border border-emerald-300 rounded-xl font-black text-slate-900 outline-none focus:border-emerald-600 disabled:opacity-50" />
+                    <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Store Stock (Qty)</label>
+                    <input id="new-stock" type="number" value={newStock} onChange={e => setNewStock(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-wh-stock')} placeholder="0" disabled={!!editingOriginalId} className="w-full p-3 bg-white border border-emerald-300 rounded-xl font-black text-slate-900 outline-none focus:border-emerald-600 disabled:opacity-50" />
+                </div>
+                <div>
+                    <label className="text-[10px] font-black uppercase text-blue-700 mb-2 block">Warehouse Stock (Qty)</label>
+                    <input id="new-wh-stock" type="number" value={newWarehouseStock} onChange={e => setNewWarehouseStock(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-cost')} placeholder="0" disabled={!!editingOriginalId} className="w-full p-3 bg-white border border-blue-300 rounded-xl font-black text-slate-900 outline-none focus:border-blue-600 disabled:opacity-50" />
                 </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-emerald-700 mb-2 block">Cost Price (PKR)</label>

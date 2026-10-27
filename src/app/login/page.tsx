@@ -14,7 +14,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
             <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-2xl font-black mx-auto mb-4 shadow-lg">TS</div>
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Welcome Back</h1>
-            <p className="text-slate-500 font-bold text-sm mt-1">Hijab Ul Eman Management System</p>
+            <p className="text-slate-500 font-bold text-sm mt-1">Trading Software Demo</p>
         </div>
 
         <form action={login} className="space-y-6">

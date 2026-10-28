@@ -805,3 +805,115 @@ export async function markNotificationsAsRead() {
     });
     revalidateAll();
 }
+// ==========================================
+// FUND TRANSFERS (JOURNAL ENTRIES)
+// ==========================================
+export async function createFundTransfer(fromCustomerId: string, toCustomerId: string, amount: number, notes: string, transferDate?: string) {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    const dateToSave = transferDate ? new Date(transferDate) : new Date();
+
+    await prisma.$transaction(async (tx: any) => {
+        // Professional JV (Journal Voucher) Number Generation
+        const jvInvoices = await tx.invoice.findMany({
+            where: { id: { startsWith: 'JV-' }, userId },
+            select: { id: true }
+        });
+        let maxJv = 0;
+        for (const inv of jvInvoices) {
+            const numPart = parseInt(inv.id.replace('JV-', '').replace('-A', '').replace('-B', ''), 10);
+            if (!isNaN(numPart) && numPart > maxJv) maxJv = numPart;
+        }
+        const nextJvNum = String(maxJv + 1).padStart(5, '0');
+        
+        // 1. From Account (Sender - Balance badhega / Debit) - Part A
+        await tx.invoice.create({
+            data: {
+                id: `JV-${nextJvNum}-A`,
+                customer: { connect: { id: fromCustomerId } },
+                user: { connect: { id: userId } },
+                totalAmount: 0,
+                paidAmount: -Number(amount), 
+                discountAmount: 0,
+                isReturn: false, isHold: false,
+                notes: `TO: ${toCustomerId} | ${notes}`,
+                createdAt: dateToSave,
+                items: { create: [] }
+            }
+        });
+
+        // 2. To Account (Receiver - Balance kam hoga / Credit) - Part B
+        await tx.invoice.create({
+            data: {
+                id: `JV-${nextJvNum}-B`,
+                customer: { connect: { id: toCustomerId } },
+                user: { connect: { id: userId } },
+                totalAmount: 0,
+                paidAmount: Number(amount), 
+                discountAmount: 0,
+                isReturn: false, isHold: false,
+                notes: `FROM: ${fromCustomerId} | ${notes}`,
+                createdAt: dateToSave,
+                items: { create: [] }
+            }
+        });
+    });
+    revalidateAll();
+    return { success: true };
+}
+
+export async function getFundTransfers() {
+    const auth = await getAuth();
+    return await prisma.invoice.findMany({
+        where: { userId: auth.tenantId, id: { startsWith: 'JV-' } },
+        include: { customer: true },
+        orderBy: { createdAt: 'desc' }
+    });
+}
+
+export async function deleteFundTransfer(jvBaseId: string) {
+    const auth = await getAuth();
+    await prisma.invoice.deleteMany({
+        where: { userId: auth.tenantId, id: { startsWith: jvBaseId } }
+    });
+    revalidateAll();
+}
+export async function updateFundTransfer(jvBaseId: string, fromCustomerId: string, toCustomerId: string, amount: number, notes: string, transferDate?: string) {
+    const auth = await getAuth();
+    const userId = auth.tenantId;
+    const dateToSave = transferDate ? new Date(transferDate) : new Date();
+
+    await prisma.$transaction(async (tx: any) => {
+        // Purani entries delete karein
+        await tx.invoice.deleteMany({ 
+            where: { userId, id: { in: [`${jvBaseId}-A`, `${jvBaseId}-B`] } } 
+        });
+
+        // Nayi updated entries banayein usi JV ID ke sath
+        await tx.invoice.create({
+            data: {
+                id: `${jvBaseId}-A`,
+                customer: { connect: { id: fromCustomerId } },
+                user: { connect: { id: userId } },
+                totalAmount: 0, paidAmount: -Number(amount), discountAmount: 0,
+                isReturn: false, isHold: false,
+                notes: `TO: ${toCustomerId} | ${notes}`,
+                createdAt: dateToSave, items: { create: [] }
+            }
+        });
+
+        await tx.invoice.create({
+            data: {
+                id: `${jvBaseId}-B`,
+                customer: { connect: { id: toCustomerId } },
+                user: { connect: { id: userId } },
+                totalAmount: 0, paidAmount: Number(amount), discountAmount: 0,
+                isReturn: false, isHold: false,
+                notes: `FROM: ${fromCustomerId} | ${notes}`,
+                createdAt: dateToSave, items: { create: [] }
+            }
+        });
+    });
+    revalidateAll();
+    return { success: true };
+}

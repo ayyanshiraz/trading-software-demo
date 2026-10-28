@@ -229,7 +229,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
             <div id="print-area" className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm print:shadow-none print:border-none print:rounded-none min-h-[600px] overflow-hidden print:overflow-visible relative">
                 <div className="p-6 md:p-8 print:p-0">
                     <div className="text-center mb-6 border-b-2 border-slate-800 pb-6">
-                        <h1 className="text-3xl font-black uppercase text-black tracking-widest font-serif mb-1">Hijab Ul Eman</h1>
+                        <h1 className="text-3xl font-black uppercase text-black tracking-widest font-serif mb-1">TRADING SOFTWARE</h1>
                         <h2 className="text-lg font-bold text-slate-800 mb-1 urdu-font" dir="auto">
                             {/* AMENDMENT: Dynamic Print Header Titles reflecting Category Filter */}
                             {view === 'customers' ? (catQuery ? `${catQuery} Ledger Summary` : 'Customer Ledger Summary') : 

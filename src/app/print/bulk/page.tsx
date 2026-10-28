@@ -107,7 +107,7 @@ export default async function BulkPrintPage({ searchParams }: { searchParams: Pr
                                     TS
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 leading-none">Hijab Ul Eman</h1>
+                                    <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 leading-none">TRADING SOFTWARE</h1>
                                     <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 mt-1">Abayas, Islamic Wear &amp; Accessories</p>
                                     <p className="text-[10px] font-bold text-slate-800 mt-0.5">Rep: {repDetails.name} ({repDetails.phone})</p>
                                 </div>

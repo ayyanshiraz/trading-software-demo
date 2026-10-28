@@ -2,9 +2,10 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Users, Package, FileText, LogOut, Tags, Receipt, BookOpen, Menu, X, ArrowLeftRight, Shield, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, Package, FileText, LogOut, Tags, Receipt, BookOpen, Menu, X, ArrowLeftRight, Shield, Bell, ArrowRightLeft } from 'lucide-react'
 import { logoutUser } from '@/actions/actions'
 import { useEffect, useState } from 'react'
+
 
 const navGroups: any[] = [
   {
@@ -36,8 +37,10 @@ const navGroups: any[] = [
     items: [
       { name: 'Ledger', href: '/ledger', icon: BookOpen },
       { name: 'Manage Users', href: '/users', icon: Shield, color: 'text-blue-500' },
+      { name: 'Fund Transfers', href: '/fund-transfers', icon: ArrowRightLeft },
     ]
   }
+  
 ]
 
 export default function Sidebar() {
@@ -63,7 +66,7 @@ export default function Sidebar() {
   return (
     <>
       <div className="fixed top-0 left-0 h-14 w-full bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 md:hidden z-[100] shadow-xl">
-        <h1 className="text-white font-black text-lg uppercase tracking-tighter">Hijab Ul Eman</h1>
+        <h1 className="text-white font-black text-lg uppercase tracking-tighter">TRADING SOFTWARE</h1>
         <button onClick={() => setIsOpen(!isOpen)} className="text-white p-1.5 hover:bg-slate-800 rounded-lg transition">
           {isOpen ? <X size={22} /> : <Menu size={22} />}
         </button>

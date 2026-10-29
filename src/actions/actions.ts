@@ -808,13 +808,20 @@ export async function markNotificationsAsRead() {
 // ==========================================
 // FUND TRANSFERS (JOURNAL ENTRIES)
 // ==========================================
-export async function createFundTransfer(fromCustomerId: string, toCustomerId: string, amount: number, notes: string, transferDate?: string) {
+export async function createFundTransfer(
+    fromCustomerId: string, 
+    toCustomerId: string, 
+    amount: number, 
+    notes: string, 
+    transferDate?: string,
+    receiptImage?: string
+) {
     const auth = await getAuth();
     const userId = auth.tenantId;
     const dateToSave = transferDate ? new Date(transferDate) : new Date();
+    const imgTag = receiptImage ? ` ||IMG||${receiptImage}` : '';
 
     await prisma.$transaction(async (tx: any) => {
-        // Professional JV (Journal Voucher) Number Generation
         const jvInvoices = await tx.invoice.findMany({
             where: { id: { startsWith: 'JV-' }, userId },
             select: { id: true }
@@ -827,6 +834,7 @@ export async function createFundTransfer(fromCustomerId: string, toCustomerId: s
         const nextJvNum = String(maxJv + 1).padStart(5, '0');
         
         // 1. From Account (Sender - Balance badhega / Debit) - Part A
+        // Image sirf Part A ke notes mein save hogi taake DB space double na ho
         await tx.invoice.create({
             data: {
                 id: `JV-${nextJvNum}-A`,
@@ -836,7 +844,7 @@ export async function createFundTransfer(fromCustomerId: string, toCustomerId: s
                 paidAmount: -Number(amount), 
                 discountAmount: 0,
                 isReturn: false, isHold: false,
-                notes: `TO: ${toCustomerId} | ${notes}`,
+                notes: `TO: ${toCustomerId} | ${notes}${imgTag}`,
                 createdAt: dateToSave,
                 items: { create: [] }
             }
@@ -878,18 +886,26 @@ export async function deleteFundTransfer(jvBaseId: string) {
     });
     revalidateAll();
 }
-export async function updateFundTransfer(jvBaseId: string, fromCustomerId: string, toCustomerId: string, amount: number, notes: string, transferDate?: string) {
+
+export async function updateFundTransfer(
+    jvBaseId: string, 
+    fromCustomerId: string, 
+    toCustomerId: string, 
+    amount: number, 
+    notes: string, 
+    transferDate?: string,
+    receiptImage?: string
+) {
     const auth = await getAuth();
     const userId = auth.tenantId;
     const dateToSave = transferDate ? new Date(transferDate) : new Date();
+    const imgTag = receiptImage ? ` ||IMG||${receiptImage}` : '';
 
     await prisma.$transaction(async (tx: any) => {
-        // Purani entries delete karein
         await tx.invoice.deleteMany({ 
             where: { userId, id: { in: [`${jvBaseId}-A`, `${jvBaseId}-B`] } } 
         });
 
-        // Nayi updated entries banayein usi JV ID ke sath
         await tx.invoice.create({
             data: {
                 id: `${jvBaseId}-A`,
@@ -897,7 +913,7 @@ export async function updateFundTransfer(jvBaseId: string, fromCustomerId: strin
                 user: { connect: { id: userId } },
                 totalAmount: 0, paidAmount: -Number(amount), discountAmount: 0,
                 isReturn: false, isHold: false,
-                notes: `TO: ${toCustomerId} | ${notes}`,
+                notes: `TO: ${toCustomerId} | ${notes}${imgTag}`,
                 createdAt: dateToSave, items: { create: [] }
             }
         });

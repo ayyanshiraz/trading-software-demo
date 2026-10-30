@@ -47,8 +47,8 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
         router.push(url);
     }
 
-    // NAYA LOGIC: Export CSV Function for Ledger
-   const handleExportCSV = () => {
+    // Direct CSV Export for the active ledger table
+    const handleExportCSV = () => {
         const printArea = document.getElementById('print-area');
         if (!printArea) return alert('No ledger data available to export.');
 
@@ -65,25 +65,26 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
             cols.forEach(col => {
                 let text = col.textContent?.trim().replace(/"/g, '""') || '';
                 text = text.replace(/\n/g, ' | ').replace(/\s+/g, ' ');
-                rowData.push(`="${text}"`); // Forces Excel to treat all ledger cells as clean text
+                rowData.push(`"${text}"`);
             });
             if (rowData.length > 0) csvData.push(rowData.join(','));
         });
 
         const csvContent = csvData.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         const viewType = new URLSearchParams(window.location.search).get('view') || 'ledger';
         a.download = `${viewType}_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
     }
 
     return (
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-            
             <style>{`
                 input[type="date"]::-webkit-calendar-picker-indicator {
                     position: absolute;
@@ -97,7 +98,6 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
             `}</style>
             
             <div className="flex flex-col gap-4">
-                
                 {/* TOP ROW: Presets & Dates */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-4">
@@ -125,27 +125,28 @@ export default function LedgerFilter({ initialFrom, initialTo, initialQuery = ''
                             </div>
                         </div>
                     </div>
-
-                    <button onClick={handleExportCSV} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 no-print">
-                        <Download size={14} /> Export CSV
-                    </button>
                 </div>
 
-                {/* BOTTOM ROW: Search & Categories */}
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative flex-1 min-w-[200px]">
-                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or ID..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 outline-none focus:border-blue-500 transition" />
+                {/* BOTTOM ROW: Search, Categories & Export CSV Button */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3 flex-1">
+                        <div className="relative flex-1 min-w-[200px]">
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or ID..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 outline-none focus:border-blue-500 transition" />
+                        </div>
+                        
+                        <select value={category} onChange={(e) => setCategory(e.target.value)} className="py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 outline-none focus:border-blue-500 transition cursor-pointer min-w-[150px]">
+                            <option value="">All Cats</option>
+                            {categories && categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
                     </div>
-                    
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 outline-none focus:border-blue-500 transition cursor-pointer min-w-[150px]">
-                        <option value="">All Cats</option>
-                        {categories && categories.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
 
                     <div className="flex gap-2">
-                        <button onClick={handleSearch} className="bg-slate-900 text-white px-6 py-2.5 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-black transition shadow-lg shrink-0">Filter</button>
-                        <button onClick={handleClear} className="bg-slate-100 text-slate-600 px-6 py-2.5 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition shrink-0">Clear</button>
+                        <button onClick={handleSearch} className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-black transition shadow-md shrink-0">Filter</button>
+                        <button onClick={handleClear} className="bg-slate-100 text-slate-600 px-5 py-2.5 rounded-lg font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition shrink-0">Clear</button>
+                        <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shrink-0">
+                            <Download size={15} /> Export CSV
+                        </button>
                     </div>
                 </div>
             </div>

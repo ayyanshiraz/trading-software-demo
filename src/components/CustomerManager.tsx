@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Zap, Save, Trash2, Edit } from 'lucide-react'
+import { Search, Zap, Save, Trash2, Edit, Download } from 'lucide-react'
 import { saveCustomer, deleteCustomer } from '@/actions/actions'
 
 export default function CustomerManager({ customers = [], categories = [] }: { customers: any[], categories: any[] }) {
@@ -13,26 +13,35 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
   const [draftPhones, setDraftPhones] = useState<Record<string, string>>({})
   const [draftBalances, setDraftBalances] = useState<Record<string, number>>({})
 
-  // RESTORED: newId state for manual Primary Key assignment
   const [newId, setNewId] = useState('')
   const [newName, setNewName] = useState('')
   const [newCat, setNewCat] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [newCnic, setNewCnic] = useState('')
   const [newAddress, setNewAddress] = useState('')
   const [newBalance, setNewBalance] = useState('')
 
   const filteredCustomers = customers.filter(c => {
       const q = search.toLowerCase()
-      return (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.id || '').toLowerCase().includes(q)
+      return (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.id || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q)
   })
 
   const handleEditClick = (c: any) => {
       setEditingOriginalId(c.id)
-      setNewId(c.id) // Loads the ID into the box for editing
+      setNewId(c.id) 
       setNewName(c.name)
       setNewCat(c.category || '')
       setNewPhone(c.phone || '')
-      setNewAddress(c.address || '')
+      
+      let addr = c.address || ''
+      let cnicVal = ''
+      if (addr.startsWith('CNIC:')) {
+          const parts = addr.split('|')
+          cnicVal = parts[0].replace('CNIC:', '').trim()
+          addr = parts[1] ? parts[1].trim() : ''
+      }
+      setNewCnic(cnicVal)
+      setNewAddress(addr)
       setNewBalance(c.openingBalance?.toString() || '0')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       document.getElementById('new-c-name')?.focus()
@@ -40,7 +49,7 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
 
   const handleCancelEdit = () => {
       setEditingOriginalId('')
-      setNewId(''); setNewName(''); setNewCat(''); setNewPhone(''); setNewAddress(''); setNewBalance('');
+      setNewId(''); setNewName(''); setNewCat(''); setNewPhone(''); setNewCnic(''); setNewAddress(''); setNewBalance('');
   }
 
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -51,13 +60,14 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
           if (editingOriginalId) {
               formData.append('originalId', editingOriginalId)
           }
-          // Passes the manually typed ID to the database
           if (newId) formData.append('id', newId) 
           
           formData.append('name', newName)
           formData.append('category', newCat)
           formData.append('phone', newPhone)
-          formData.append('address', newAddress)
+          
+          const finalAddress = newCnic ? `CNIC: ${newCnic} | ${newAddress}` : newAddress
+          formData.append('address', finalAddress)
           formData.append('openingBalance', newBalance || '0')
           
           await saveCustomer(formData)
@@ -108,6 +118,43 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
       }
   }
 
+  const handleExportCSV = (type: 'customer' | 'supplier') => {
+      const targetList = customers.filter(c => {
+          const cat = (c.category || '').toLowerCase();
+          if (type === 'customer') return cat.includes('customer') || cat.includes('receivable') || !cat;
+          return cat.includes('supplier') || cat.includes('payable');
+      });
+
+      if (targetList.length === 0) return alert(`No ${type} records available for export.`);
+      
+      const titleName = type === 'customer' ? 'Customers_List' : 'Suppliers_List';
+      const headers = ['ID', 'Name', 'Category', 'Phone', 'CNIC / NTN', 'Address', 'Opening Balance (PKR)'];
+      const csvRows = [headers.join(',')];
+
+      targetList.forEach(c => {
+          let addr = c.address || '';
+          let cnic = '';
+          if (addr.startsWith('CNIC:')) {
+              const parts = addr.split('|');
+              cnic = parts[0].replace('CNIC:', '').trim();
+              addr = parts[1] ? parts[1].trim() : '';
+          }
+          csvRows.push([
+              `="${c.id}"`,
+              `"${c.name}"`,
+              `"${c.category || ''}"`,
+              `="${c.phone || ''}"`,
+              `="${cnic}"`,
+              `"${addr}"`,
+              c.openingBalance || 0
+          ].join(','));
+      });
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${titleName}.csv`; a.click();
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>, nextFieldId: string) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -130,7 +177,6 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                 {editingOriginalId && <button type="button" onClick={handleCancelEdit} className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-800">Cancel Edit</button>}
             </div>
             
-            {/* ROW 1: Customer ID and Customer Name */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Customer ID (Optional)</label>
@@ -142,8 +188,7 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                 </div>
             </div>
 
-            {/* ROW 2: Category, Phone, and Opening Balance */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Category</label>
                     <select id="new-c-cat" value={newCat} onChange={e => setNewCat(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-c-phone')} className="urdu-font text-left w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 uppercase">
@@ -153,7 +198,11 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                 </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Phone Number</label>
-                    <input id="new-c-phone" type="text" value={newPhone} onChange={e => setNewPhone(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-c-bal')} placeholder="03XXXXXXXXX" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600" />
+                    <input id="new-c-phone" type="text" value={newPhone} onChange={e => setNewPhone(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-c-cnic')} placeholder="03XXXXXXXXX" className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600" />
+                </div>
+                <div>
+                    <label className="text-[10px] font-black uppercase text-indigo-600 mb-2 block">CNIC / NTN (Optional)</label>
+                    <input id="new-c-cnic" type="text" value={newCnic} onChange={e => setNewCnic(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'new-c-bal')} placeholder="XXXXX-XXXXXXX-X" className="w-full p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl font-bold text-slate-900 outline-none focus:border-indigo-600" />
                 </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-red-500 mb-2 block">Opening Balance (PKR)</label>
@@ -161,7 +210,6 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                 </div>
             </div>
 
-            {/* ROW 3: Address */}
             <div className="mb-6">
                 <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block">Address</label>
                 <textarea id="new-c-addr" value={newAddress} onChange={e => setNewAddress(e.target.value)} onKeyDown={(e) => handleKeyDown(e, 'submit')} dir="ltr" rows={2} className="urdu-font text-left w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600 resize-none uppercase" />
@@ -172,7 +220,6 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
             </button>
         </form>
 
-        {/* ... Rest of the CustomerManager Table Data ... */}
         <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-200">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div className="relative w-full md:w-72">
@@ -180,15 +227,22 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                     <input type="text" placeholder="Search name, phone or ID..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" className="urdu-font text-left w-full pl-10 p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 outline-none focus:border-blue-600" />
                 </div>
                 
-                <div className="flex gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <button type="button" onClick={() => handleExportCSV('customer')} className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-black uppercase transition bg-slate-900 text-white hover:bg-black shadow-md border border-slate-800">
+                        <Download size={15} /> Export Customers CSV
+                    </button>
+                    <button type="button" onClick={() => handleExportCSV('supplier')} className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-black uppercase transition bg-slate-800 text-white hover:bg-black shadow-md border border-slate-700">
+                        <Download size={15} /> Export Suppliers CSV
+                    </button>
+
                     {!quickEditMode ? (
-                        <button type="button" onClick={() => setQuickEditMode(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200">
-                            <Zap size={16} /> Quick Edit Data
+                        <button type="button" onClick={() => setQuickEditMode(true)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200">
+                            <Zap size={16} /> Quick Edit
                         </button>
                     ) : (
                         <>
-                            <button type="button" onClick={() => { setQuickEditMode(false); setDraftPhones({}); setDraftBalances({}); }} className="px-6 py-3 rounded-xl text-xs font-black uppercase bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</button>
-                            <button type="button" onClick={handleSaveQuickEdits} disabled={isSaving} className="flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-black uppercase bg-blue-600 text-white hover:bg-blue-700 shadow-lg">
+                            <button type="button" onClick={() => { setQuickEditMode(false); setDraftPhones({}); setDraftBalances({}); }} className="px-5 py-3 rounded-xl text-xs font-black uppercase bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</button>
+                            <button type="button" onClick={handleSaveQuickEdits} disabled={isSaving} className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase bg-blue-600 text-white hover:bg-blue-700 shadow-lg">
                                 <Save size={16} /> {isSaving ? 'Saving...' : 'Save Edits'}
                             </button>
                         </>
@@ -200,49 +254,58 @@ export default function CustomerManager({ customers = [], categories = [] }: { c
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b-2 border-slate-200">
                         <tr>
-                            <th className="p-4">ID</th><th className="p-4">Name</th><th className="p-4">Category</th>
+                            <th className="p-4">ID</th><th className="p-4">Name</th><th className="p-4">Category</th><th className="p-4">CNIC / NTN</th>
                             <th className={`p-4 ${quickEditMode ? 'bg-blue-100 text-blue-800 border-b-4 border-blue-400' : ''}`}>Phone</th>
                             <th className={`p-4 text-right ${quickEditMode ? 'bg-red-100 text-red-800 border-b-4 border-red-400' : ''}`}>Opening Balance</th>
                             <th className="p-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="text-sm font-bold text-slate-700 divide-y divide-slate-100">
-                        {filteredCustomers.map((c, index) => (
-                            <tr key={c.id} className="hover:bg-slate-50 transition">
-                                <td className="p-4 font-mono text-xs uppercase">{c.id.slice(-6)}</td>
-                                <td className="p-4 urdu-font text-slate-900 font-black text-base" dir="ltr">{c.name}</td>
-                                <td className="p-4 urdu-font" dir="ltr">{c.category || '---'}</td>
-                                
-                                <td className={`p-4 ${quickEditMode ? 'bg-blue-50' : ''}`}>
-                                    {quickEditMode ? (
-                                        <input type="text" id={`phone-${index}`} className="w-32 p-2 border-2 border-blue-300 rounded-lg font-bold text-slate-900 outline-none focus:border-blue-600"
-                                            value={draftPhones[c.id] !== undefined ? draftPhones[c.id] : c.phone}
-                                            onChange={e => setDraftPhones({...draftPhones, [c.id]: e.target.value})}
-                                            onFocus={e => e.target.select()}
-                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`bal-${index}`)?.focus(); } }}
-                                        />
-                                    ) : <span>{c.phone || '---'}</span>}
-                                </td>
+                        {filteredCustomers.map((c, index) => {
+                            let addr = c.address || ''
+                            let cnic = '---'
+                            if (addr.startsWith('CNIC:')) {
+                                const parts = addr.split('|')
+                                cnic = parts[0].replace('CNIC:', '').trim()
+                            }
+                            return (
+                                <tr key={c.id} className="hover:bg-slate-50 transition">
+                                    <td className="p-4 font-mono text-xs uppercase">{c.id.slice(-6)}</td>
+                                    <td className="p-4 urdu-font text-slate-900 font-black text-base" dir="ltr">{c.name}</td>
+                                    <td className="p-4 urdu-font" dir="ltr">{c.category || '---'}</td>
+                                    <td className="p-4 font-mono text-xs text-indigo-700">{cnic}</td>
+                                    
+                                    <td className={`p-4 ${quickEditMode ? 'bg-blue-50' : ''}`}>
+                                        {quickEditMode ? (
+                                            <input type="text" id={`phone-${index}`} className="w-32 p-2 border-2 border-blue-300 rounded-lg font-bold text-slate-900 outline-none focus:border-blue-600"
+                                                value={draftPhones[c.id] !== undefined ? draftPhones[c.id] : c.phone}
+                                                onChange={e => setDraftPhones({...draftPhones, [c.id]: e.target.value})}
+                                                onFocus={e => e.target.select()}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`bal-${index}`)?.focus(); } }}
+                                            />
+                                        ) : <span>{c.phone || '---'}</span>}
+                                    </td>
 
-                                <td className={`p-4 text-right ${quickEditMode ? 'bg-red-50' : ''}`}>
-                                    {quickEditMode ? (
-                                        <input type="number" id={`bal-${index}`} className="w-28 p-2 text-right border-2 border-red-300 rounded-lg font-black text-slate-900 outline-none focus:border-red-600"
-                                            value={draftBalances[c.id] !== undefined ? draftBalances[c.id] : c.openingBalance}
-                                            onChange={e => setDraftBalances({...draftBalances, [c.id]: Number(e.target.value)})}
-                                            onFocus={e => e.target.select()}
-                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`phone-${index + 1}`)?.focus(); } }}
-                                        />
-                                    ) : <span className="text-red-600 font-black">{c.openingBalance.toLocaleString()}</span>}
-                                </td>
+                                    <td className={`p-4 text-right ${quickEditMode ? 'bg-red-50' : ''}`}>
+                                        {quickEditMode ? (
+                                            <input type="number" id={`bal-${index}`} className="w-28 p-2 text-right border-2 border-red-300 rounded-lg font-black text-slate-900 outline-none focus:border-red-600"
+                                                value={draftBalances[c.id] !== undefined ? draftBalances[c.id] : c.openingBalance}
+                                                onChange={e => setDraftBalances({...draftBalances, [c.id]: Number(e.target.value)})}
+                                                onFocus={e => e.target.select()}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`phone-${index + 1}`)?.focus(); } }}
+                                            />
+                                        ) : <span className="text-red-600 font-black">{c.openingBalance.toLocaleString()}</span>}
+                                    </td>
 
-                                <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => handleEditClick(c)} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition"><Edit size={16} /></button>
-                                        <button onClick={() => handleDelete(c.id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100 transition"><Trash2 size={16} /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                    <td className="p-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => handleEditClick(c)} className="p-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition"><Edit size={16} /></button>
+                                            <button onClick={() => handleDelete(c.id)} className="p-2 bg-red-50 text-red-600 rounded hover:bg-red-100 transition"><Trash2 size={16} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>

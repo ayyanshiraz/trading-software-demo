@@ -4,6 +4,7 @@ import { TrendingUp, DollarSign, ArrowLeftRight, Search, FileText, CornerDownLef
 import { getLedgerReportData } from '@/actions/actions'
 import PrintButton from '@/components/PrintButton'
 import CustomerHistorySearch from '@/components/CustomerHistorySearch'
+import ExportLedgerCSVButton from '@/components/ExportLedgerCSVButton'
 
 const prisma = new PrismaClient()
 export const dynamic = 'force-dynamic'
@@ -39,7 +40,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
   };
 
-  // AMENDMENT: Check if current view is Product-based or Customer-based for the dropdown
   const isProductView = view === 'products' || view === 'product_categories' || view === 'inventory_list';
   const isCustomerView = view === 'customers' || view === 'customer_list' || view === 'categories';
 
@@ -68,7 +68,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (searchQuery) displayProductCategories = displayProductCategories.filter((c: any) => (c.category || '').toLowerCase().includes(searchQuery))
   displayProductCategories.sort(naturalSort)
 
-  // AMENDMENT: Inventory List mapped perfectly
   let displayInventory = data.allProducts || []
   if (catQuery && isProductView) displayInventory = displayInventory.filter((p: any) => (p.category || '') === catQuery)
   if (searchQuery) displayInventory = displayInventory.filter((p: any) => (p.name || '').toLowerCase().includes(searchQuery) || String(p.id || '').toLowerCase().includes(searchQuery))
@@ -192,7 +191,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                       <input type="text" name="search" defaultValue={searchQuery} placeholder="Search..." className="urdu-font pl-7 p-2 w-full text-sm font-bold text-slate-900 outline-none bg-slate-50 rounded border border-slate-200" dir="ltr" />
                   </div>
                   
-                  {/* AMENDMENT: Dropdown automatically switches to Product Categories when in Product views */}
                   {(isProductView || isCustomerView) && (
                       <select name="category" defaultValue={catQuery} className="urdu-font p-2 flex-1 sm:w-32 text-sm font-bold text-slate-900 outline-none bg-slate-50 rounded border border-slate-200" dir="ltr">
                           <option value="">All Cats</option>
@@ -222,7 +220,10 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             )
                         })}
                     </div>
-                    <div className="mt-6 pt-4 border-t border-slate-100 px-2"><PrintButton /></div>
+                    <div className="mt-6 pt-4 border-t border-slate-100 px-2 flex flex-col gap-2">
+                        <ExportLedgerCSVButton />
+                        <PrintButton />
+                    </div>
                 </div>
             </div>
 
@@ -231,7 +232,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                     <div className="text-center mb-6 border-b-2 border-slate-800 pb-6">
                         <h1 className="text-3xl font-black uppercase text-black tracking-widest font-serif mb-1">TRADING SOFTWARE</h1>
                         <h2 className="text-lg font-bold text-slate-800 mb-1 urdu-font" dir="auto">
-                            {/* AMENDMENT: Dynamic Print Header Titles reflecting Category Filter */}
                             {view === 'customers' ? (catQuery ? `${catQuery} Ledger Summary` : 'Customer Ledger Summary') : 
                              view === 'customer_history' ? (historyCustomer ? `Account Statement: ${historyCustomer.id} - ${historyCustomer.name}` : 'Customer Account History') : 
                              view === 'categories' ? (catQuery ? `${catQuery} Detailed Ledger` : 'Category Ledger Summary') : 
@@ -245,9 +245,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
 
                     <div className="w-full overflow-x-auto print:overflow-visible relative print-container">
                         
-                        {/* =========================================
-                            CUSTOMER HISTORY
-                        ========================================== */}
                         {view === 'customer_history' && (
                             <div className="space-y-6">
                                 <div className="no-print relative z-50 mb-8 max-w-xl mx-auto">
@@ -292,9 +289,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </div>
                         )}
 
-                        {/* =========================================
-                            CUSTOMER LEDGER (ALL)
-                        ========================================== */}
                         {view === 'customers' && (
                             <table className="w-full min-w-[800px] print:min-w-0 text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">
@@ -323,9 +317,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </table>
                         )}
 
-                        {/* =========================================
-                            CUSTOMER CATEGORIES
-                        ========================================== */}
                         {view === 'categories' && (
                             <table className="w-full text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">
@@ -371,9 +362,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </table>
                         )}
 
-                        {/* =========================================
-                            PRODUCT SALES
-                        ========================================== */}
                         {view === 'products' && (
                             <table className="w-full text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">
@@ -394,9 +382,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </table>
                         )}
 
-                        {/* =========================================
-                            PRODUCT CATEGORIES
-                        ========================================== */}
                         {view === 'product_categories' && (
                             <table className="w-full text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">
@@ -428,16 +413,13 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </table>
                         )}
 
-                        {/* =========================================
-                            INVENTORY LIST
-                        ========================================== */}
                         {view === 'inventory_list' && (
                             <table className="w-full text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">
                                 <tr><th className="p-3 print:p-2 border border-slate-300 w-12 print:w-auto text-center">Sr.</th><th className="p-3 print:p-2 border border-slate-300">Product Name</th><th className="p-3 print:p-2 border border-slate-300">Category</th><th className="p-3 print:p-2 border border-slate-300 text-right">Cost Price</th><th className="p-3 print:p-2 border border-slate-300 text-right">Selling Price</th></tr>
                             </thead>
                             <tbody className="text-sm print:text-[11px] font-bold text-slate-700 print:text-black">
-                                {displayInventory.map((p: any, index: number) => (
+                               {displayInventory.map((p: any, index: number) => (
                                     <tr key={p.id} className="hover:bg-slate-50 transition">
                                         <td className="p-3 print:p-2 border border-slate-300 text-center text-slate-400 print:text-black">{index + 1}</td>
                                         <td className="p-3 print:p-2 border border-slate-300 uppercase text-slate-900 print:text-black urdu-font text-left" dir="ltr">{p.id} - {p.name} <span className="text-[10px] print:text-[9px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded ml-2 print:bg-white print:text-black print:border print:border-slate-300 font-sans">{p.unit || 'Bags'}</span></td>
@@ -450,9 +432,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
                             </table>
                         )}
 
-                        {/* =========================================
-                            CUSTOMER LIST
-                        ========================================== */}
                         {view === 'customer_list' && (
                             <table className="w-full text-left border-collapse border border-slate-300">
                             <thead className="bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-widest border-b-2 border-slate-300">

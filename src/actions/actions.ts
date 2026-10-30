@@ -933,3 +933,78 @@ export async function updateFundTransfer(
     revalidateAll();
     return { success: true };
 }
+// Master CSV Export Server Action (Updated without special unicode arrows)
+export async function exportMasterLedgerCSVAction(fromDate?: string, toDate?: string) {
+    const from = fromDate ? new Date(`${fromDate}T00:00:00+05:00`) : undefined
+    const to = toDate ? new Date(`${toDate}T23:59:59.999+05:00`) : undefined
+    
+    const data = await getLedgerReportData(from, to)
+    const csvRows: string[] = []
+    
+    // 1. Customer Ledger Summary
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Customer Ledger Summary"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Sr.","Customer Details","Opening Bal","Invoiced","Returns","Paid Amount","Closing Bal"`)
+    ;(data.customerLedgers || []).forEach((c: any, index: number) => {
+        csvRows.push(`"${index + 1}","${c.id} - ${c.name}","${c.openingBalance || 0}","${c.invoicedAmount || 0}","${c.returnedAmount || c.returnAmount || 0}","${c.paidAmount || 0}","${c.closingBalance || 0}"`)
+    })
+    csvRows.push(``)
+
+    // 2. Customer Categories Summary
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Customer Categories Summary"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Category / Customer","Opening Bal","Invoiced","Paid Amount","Closing Bal"`)
+    ;(data.categoryLedgers || []).forEach((cat: any) => {
+        csvRows.push(`"${cat.category} (Total)","${cat.openingBalance || 0}","${cat.invoicedAmount || 0}","${cat.paidAmount || 0}","${cat.closingBalance || 0}"`)
+        ;(data.customerLedgers || []).filter((c: any) => c.category === cat.category).forEach((c: any) => {
+            csvRows.push(`"  - ${c.id} - ${c.name}","${c.openingBalance || 0}","${c.invoicedAmount || 0}","${c.paidAmount || 0}","${c.closingBalance || 0}"`)
+        })
+    })
+    csvRows.push(``)
+
+    // 3. Product Sales Summary
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Product Sales Summary"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Sr.","Product Name","Category","Qty Sold","Gross Revenue","Generated Profit"`)
+    ;(data.productSales || []).forEach((p: any, index: number) => {
+        csvRows.push(`"${index + 1}","${p.id} - ${p.name}","${p.category}","${p.qty || 0}","${p.revenue || 0}","${(p.revenue || 0) - (p.cost || 0)}"`)
+    })
+    csvRows.push(``)
+
+    // 4. Product Categories Summary
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Product Category Summary"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Category / Product","Qty Sold","Revenue","Cost","Profit"`)
+    ;(data.productCategoryLedgers || []).forEach((cat: any) => {
+        csvRows.push(`"${cat.category} (Total)","${cat.totalQty || 0}","${cat.totalRevenue || 0}","${cat.totalCost || 0}","${cat.totalProfit || 0}"`)
+        ;(cat.products || []).forEach((p: any) => {
+            csvRows.push(`"  - ${p.id} - ${p.name}","${p.qty || 0}","${p.revenue || 0}","${p.cost || 0}","${p.profit || 0}"`)
+        })
+    })
+    csvRows.push(``)
+
+    // 5. Inventory List
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Active Product List (Inventory)"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Sr.","Product Name","Category","Cost Price","Selling Price"`)
+    ;(data.allProducts || []).forEach((p: any, index: number) => {
+        csvRows.push(`"${index + 1}","${p.id} - ${p.name}","${p.category}","${p.cost || 0}","${p.price || 0}"`)
+    })
+    csvRows.push(``)
+
+    // 6. Customer List
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"REPORT SECTION: Active Customer List"`)
+    csvRows.push(`"--------------------------------------------------"`)
+    csvRows.push(`"Sr.","Customer ID & Name","Phone","Address"`)
+    ;(data.allCustomers || []).forEach((c: any, index: number) => {
+        csvRows.push(`"${index + 1}","${c.id} - ${c.name}","${c.phone || '---'}","${c.address || 'N/A'}"`)
+    })
+
+    return csvRows.join('\n')
+}
